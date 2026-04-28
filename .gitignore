@@ -1,4 +1,4 @@
 .env
-*.csv
+qa_joined.csv
 __pycache__/
 *.pyc
