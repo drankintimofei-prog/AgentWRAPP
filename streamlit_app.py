@@ -50,10 +50,10 @@ if run:
         unsafe_allow_html=True,
     )
     m1, m2 = st.columns(2)
-    m1.metric("Text answers", f"{report['text_good']}/{report['text_total']}",
-              f"{report['text_pct']}% (threshold 70%)")
-    m2.metric("Structured answers", f"{report['struct_good']}/{report['struct_total']}",
+    m1.metric("Structured answers", f"{report['struct_good']}/{report['struct_total']}",
               f"{report['struct_pct']}% (threshold 90%)")
+    m2.metric("Text answers", f"{report['text_good']}/{report['text_total']}",
+              f"{report['text_pct']}% (threshold 70%)")
     st.divider()
 
     text_rows = details[details["question_type_label"] == "Tekst"]
