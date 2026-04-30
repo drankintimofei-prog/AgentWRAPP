@@ -5,7 +5,8 @@ load_dotenv()
 
 pd.set_option("display.max_colwidth", None)
 
-GOOD_THRESHOLD = 0.70  # fraction of questions that must be good for visit to pass
+TEXT_THRESHOLD = 0.70       # min fraction of text questions that must be good
+STRUCTURED_THRESHOLD = 0.90 # min fraction of structured questions that must be answered
 
 # ── Evaluators ────────────────────────────────────────────────────────────────
 
@@ -33,8 +34,17 @@ class GroqEvaluator(AnswerEvaluator):
                 {
                     "role": "system",
                     "content": (
-                        "Je beoordeelt of een antwoord adequaat is voor de gegeven vraag. "
-                        "Een slecht antwoord is te kort, irrelevant, of geeft geen echte informatie. "
+                        "Je beoordeelt of een antwoord relevant is voor de gegeven vraag. "
+                        "Regels:\n"
+                        "- Een kort feitelijk antwoord is GOED als de vraag een feit vraagt (adres, tijd, bedrag, product, naam).\n"
+                        "- Een antwoord is SLECHT alleen als het volledig irrelevant is, of als de vraag om uitleg vraagt maar het antwoord geen uitleg geeft.\n"
+                        "- Beoordeel NIET op lengte alleen — een kort maar correct antwoord is altijd goed.\n"
+                        "Voorbeelden:\n"
+                        "Vraag: Wat is het adres? Antwoord: Haarlemmerdijk 50 → goed\n"
+                        "Vraag: Hoe laat stapte je binnen? Antwoord: 19:30 → goed\n"
+                        "Vraag: Welk product heb je gekocht? Antwoord: Salade met kip → goed\n"
+                        "Vraag: Licht toe hoe dit verliep. Antwoord: ja → slecht\n"
+                        "Vraag: Licht toe hoe dit verliep. Antwoord: Er was bijna niemand dus ik werd direct geholpen → goed\n"
                         "Antwoord alleen met het woord 'goed' of 'slecht', niets anders."
                     ),
                 },
@@ -81,8 +91,17 @@ class OpenAIEvaluator(AnswerEvaluator):
                 {
                     "role": "system",
                     "content": (
-                        "Je beoordeelt of een antwoord adequaat is voor de gegeven vraag. "
-                        "Een slecht antwoord is te kort, irrelevant, of geeft geen echte informatie. "
+                        "Je beoordeelt of een antwoord relevant is voor de gegeven vraag. "
+                        "Regels:\n"
+                        "- Een kort feitelijk antwoord is GOED als de vraag een feit vraagt (adres, tijd, bedrag, product, naam).\n"
+                        "- Een antwoord is SLECHT alleen als het volledig irrelevant is, of als de vraag om uitleg vraagt maar het antwoord geen uitleg geeft.\n"
+                        "- Beoordeel NIET op lengte alleen — een kort maar correct antwoord is altijd goed.\n"
+                        "Voorbeelden:\n"
+                        "Vraag: Wat is het adres? Antwoord: Haarlemmerdijk 50 → goed\n"
+                        "Vraag: Hoe laat stapte je binnen? Antwoord: 19:30 → goed\n"
+                        "Vraag: Welk product heb je gekocht? Antwoord: Salade met kip → goed\n"
+                        "Vraag: Licht toe hoe dit verliep. Antwoord: ja → slecht\n"
+                        "Vraag: Licht toe hoe dit verliep. Antwoord: Er was bijna niemand dus ik werd direct geholpen → goed\n"
                         "Antwoord alleen met het woord 'goed' of 'slecht', niets anders."
                     ),
                 },
@@ -119,7 +138,7 @@ def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
 
     # Text type: quick length check first, then LLM
     if q_type == "Tekst":
-        if not has_text or len(str(text).split()) < 2:
+        if not has_text:
             return "bad"
         # For generic follow-up questions, prepend the parent question as context
         label = str(row["description"]).strip().lower().rstrip(".")
@@ -160,17 +179,31 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
         lambda r: evaluate_answer(r, evaluator, r["parent_question"]), axis=1
     )
 
-    total = len(rows)
-    good = (rows["verdict"] == "good").sum()
-    pct = good / total if total > 0 else 0
+    text_rows = rows[rows["question_type_label"] == "Tekst"]
+    structured_rows = rows[rows["question_type_label"] != "Tekst"]
+
+    text_good = (text_rows["verdict"] == "good").sum()
+    text_total = len(text_rows)
+    text_pct = text_good / text_total if text_total > 0 else 1.0
+
+    struct_good = (structured_rows["verdict"] == "good").sum()
+    struct_total = len(structured_rows)
+    struct_pct = struct_good / struct_total if struct_total > 0 else 1.0
+
+    passed = text_pct >= TEXT_THRESHOLD and struct_pct >= STRUCTURED_THRESHOLD
 
     return {
         "visit_id": visit_id,
-        "total_questions": total,
-        "good": int(good),
-        "bad": int(total - good),
-        "pct_good": round(pct * 100, 1),
-        "verdict": "PASS" if pct >= GOOD_THRESHOLD else "FAIL",
+        "total_questions": len(rows),
+        "good": int((rows["verdict"] == "good").sum()),
+        "bad": int((rows["verdict"] == "bad").sum()),
+        "text_good": int(text_good),
+        "text_total": int(text_total),
+        "text_pct": round(text_pct * 100, 1),
+        "struct_good": int(struct_good),
+        "struct_total": int(struct_total),
+        "struct_pct": round(struct_pct * 100, 1),
+        "verdict": "PASS" if passed else "FAIL",
         "details": rows[["qaas_question_id", "question_order", "description",
                           "parent_question", "question_type_label",
                           "answer_text", "answer_value", "verdict"]],
@@ -180,8 +213,9 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
 def print_visit_report(report: dict) -> None:
     v = report
     print("=" * 80)
-    print(f"Visit {v['visit_id']}  |  {v['good']}/{v['total_questions']} good "
-          f"({v['pct_good']}%)  |  {v['verdict']}")
+    print(f"Visit {v['visit_id']}  |  {v['verdict']}")
+    print(f"  Text:       {v['text_good']}/{v['text_total']} good ({v['text_pct']}%)  [threshold 70%]")
+    print(f"  Structured: {v['struct_good']}/{v['struct_total']} answered ({v['struct_pct']}%)  [threshold 90%]")
     print("=" * 80)
     for _, row in v["details"].iterrows():
         icon = "✓" if row["verdict"] == "good" else "✗"
