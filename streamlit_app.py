@@ -71,8 +71,7 @@ if run:
         for _, row in structured_rows.iterrows():
             ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
             icon = "✅" if row["verdict"] == "good" else "❌"
-            q_label = str(row["description"])[:60]
-            st.markdown(f"{icon} **[{row['question_type_label']}]** {q_label}")
+            st.markdown(f"{icon} **[{row['question_type_label']}]** {row['description']}")
             st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;→ `{ans}`")
 
     # ── Text questions with LLM decision ──────────────────────────────────────
@@ -86,17 +85,13 @@ if run:
             verdict_icon = "✅" if row["verdict"] == "good" else "❌"
             has_parent = pd.notna(row["parent_question"])
 
-            # Build expander title: include parent context if present
-            if has_parent:
-                parent_a_str = f' → "{str(row["parent_answer"])}"' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip() else ""
-                parent_ctx = f' [re: *{str(row["parent_question"])[:40]}{parent_a_str}*]'
-            else:
-                parent_ctx = ""
-
             with st.expander(
-                f"{verdict_icon} Q{row['qaas_question_id']} — {str(row['description'])[:60]}{parent_ctx}",
+                f"{verdict_icon} Q{row['qaas_question_id']} — {row['description']}",
                 expanded=(row["verdict"] == "bad"),
             ):
+                if pd.notna(row["parent_question"]):
+                    parent_a_str = f' → **"{str(row["parent_answer"])}"**' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip() else ""
+                    st.caption(f"Follow-up on: *{row['parent_question']}*{parent_a_str}")
                 ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
                 st.markdown(f"**Answer:** {ans}")
                 badge = "🟢 Good" if row["verdict"] == "good" else "🔴 Bad"
