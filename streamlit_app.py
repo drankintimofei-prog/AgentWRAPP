@@ -86,16 +86,23 @@ if run:
             verdict_icon = "✅" if row["verdict"] == "good" else "❌"
             has_parent = pd.notna(row["parent_question"])
 
+            # Build expander title: include parent context if present
+            if has_parent:
+                parent_a_str = f' → "{str(row["parent_answer"])}"' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip() else ""
+                parent_ctx = f' [re: *{str(row["parent_question"])[:40]}{parent_a_str}*]'
+            else:
+                parent_ctx = ""
+
             with st.expander(
-                f"{verdict_icon} Q{row['qaas_question_id']} — {str(row['description'])[:60]}",
+                f"{verdict_icon} Q{row['qaas_question_id']} — {str(row['description'])[:60]}{parent_ctx}",
                 expanded=(row["verdict"] == "bad"),
             ):
-                if has_parent:
-                    st.caption(f"Follow-up on: *{row['parent_question']}*")
                 ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
                 st.markdown(f"**Answer:** {ans}")
                 badge = "🟢 Good" if row["verdict"] == "good" else "🔴 Bad"
                 st.markdown(f"**LLM verdict:** {badge}")
+                if row["reason"]:
+                    st.caption(f"ℹ️ {row['reason']}")
 
 else:
     st.info("Select a visit ID in the sidebar and click **Evaluate**.")

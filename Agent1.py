@@ -8,52 +8,65 @@ pd.set_option("display.max_colwidth", None)
 TEXT_THRESHOLD = 0.70       # min fraction of text questions that must be good
 STRUCTURED_THRESHOLD = 0.90 # min fraction of structured questions that must be answered
 
+SYSTEM_PROMPT = """Je beoordeelt open antwoorden van mystery shoppers in het Nederlands.
+
+REGELS VOOR EEN GOED ANTWOORD:
+- Bij toelichting/follow-up vragen: het antwoord bevestigt en legt het vorige ja/nee of 1-5 antwoord uit
+- Het is beschrijvend genoeg om nuttig te zijn voor de bedrijfseigenaar
+- Bij subjectieve vragen (eten, smaak, sfeer): leg uit WAAROM je het goed/niet goed vond
+- Kortere antwoorden zijn ok als de vraag om een korte uitleg vraagt
+- Voor feitelijke vragen (adres, tijd, bedrag, product, naam): een kort feitelijk antwoord is ALTIJD goed
+
+REGELS VOOR EEN SLECHT ANTWOORD:
+- Geen echte uitleg (bijv. alleen "ja", "nee", "goed", "prima")
+- Onzinnige woorden of tekst (bijv. "asdfsda", "no is bike seven house tree")
+- Vloeken in welke taal dan ook
+- Volledig irrelevant voor de vraag
+
+VOORBEELDEN GOED:
+- Vraag: Adres? → Antwoord: Haarlemmerdijk 50 → goed: kort feitelijk antwoord
+- Vraag: Hoe laat binnen? → Antwoord: 19:30 → goed: exact gevraagd feit
+- Vraag: Toelichting [vorige: "Was het eten vers?" → "Ja"] → Antwoord: "De ingrediënten smaakten vers en de friet was knapperig gebakken" → goed: bevestigt ja-antwoord met concrete beschrijving
+- Vraag: Toelichting [vorige: "Hoe tevreden ben je over het eten?" → "2/5"] → Antwoord: "De friet was slap en de saus was erg zuur" → goed: legt lage score uit met details
+
+VOORBEELDEN SLECHT:
+- Vraag: Toelichting → Antwoord: "ja" → slecht: geen echte uitleg
+- Vraag: Toelichting [vorige: "Was het eten vers?" → "Ja"] → Antwoord: "Het eten was niet lekker" → slecht: tegenstrijdig en niet beschrijvend
+- Vraag: Toelichting → Antwoord: "goed" → slecht: 1 woord, geen uitleg
+
+Antwoord ALTIJD in dit formaat (max 1 zin reden):
+goed: <korte reden>
+of
+slecht: <korte reden>"""
+
 # ── Evaluators ────────────────────────────────────────────────────────────────
 
 class AnswerEvaluator(ABC):
     @abstractmethod
-    def evaluate_text(self, question: str, answer: str) -> bool:
-        """Return True if the answer is adequate for the question."""
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
+        """Return (is_good, reason)."""
         pass
 
 
 class GroqEvaluator(AnswerEvaluator):
-    """Free LLM via Groq (console.groq.com — no credit card needed).
-    Get a free key at: https://console.groq.com/keys
-    """
+    """Free LLM via Groq. Get a free key at: https://console.groq.com/keys"""
 
     def __init__(self, api_key: str, model: str = "llama-3.1-8b-instant"):
         from groq import Groq
         self.client = Groq(api_key=api_key)
         self.model = model
 
-    def evaluate_text(self, question: str, answer: str) -> bool:
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Je beoordeelt of een antwoord relevant is voor de gegeven vraag. "
-                        "Regels:\n"
-                        "- Een kort feitelijk antwoord is GOED als de vraag een feit vraagt (adres, tijd, bedrag, product, naam).\n"
-                        "- Een antwoord is SLECHT alleen als het volledig irrelevant is, of als de vraag om uitleg vraagt maar het antwoord geen uitleg geeft.\n"
-                        "- Beoordeel NIET op lengte alleen — een kort maar correct antwoord is altijd goed.\n"
-                        "Voorbeelden:\n"
-                        "Vraag: Wat is het adres? Antwoord: Haarlemmerdijk 50 → goed\n"
-                        "Vraag: Hoe laat stapte je binnen? Antwoord: 19:30 → goed\n"
-                        "Vraag: Welk product heb je gekocht? Antwoord: Salade met kip → goed\n"
-                        "Vraag: Licht toe hoe dit verliep. Antwoord: ja → slecht\n"
-                        "Vraag: Licht toe hoe dit verliep. Antwoord: Er was bijna niemand dus ik werd direct geholpen → goed\n"
-                        "Antwoord alleen met het woord 'goed' of 'slecht', niets anders."
-                    ),
-                },
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Vraag: {question}\nAntwoord: {answer}"},
             ],
-            max_tokens=5,
+            max_tokens=60,
             temperature=0,
         )
-        return response.choices[0].message.content.strip().lower() == "goed"
+        return _parse_verdict(response.choices[0].message.content)
 
 
 class HuggingFaceEvaluator(AnswerEvaluator):
@@ -66,51 +79,47 @@ class HuggingFaceEvaluator(AnswerEvaluator):
         self.client = InferenceClient(token=hf_token)
         self.model = "joeddav/xlm-roberta-large-xnli"
 
-    def evaluate_text(self, question: str, answer: str) -> bool:
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
         text = f"Vraag: {question}\nAntwoord: {answer}"
         result = self.client.zero_shot_classification(
             text=text,
             candidate_labels=["passend antwoord", "onvoldoende antwoord"],
             model=self.model,
         )
-        return result[0].label == "passend antwoord"
+        is_good = result[0].label == "passend antwoord"
+        return is_good, ""
 
 
 class OpenAIEvaluator(AnswerEvaluator):
-    """GPT evaluator — swap in when you have your university API key."""
+    """OpenAI-compatible evaluator. Works with OpenAI directly or UvA LiteLLM proxy.
+    UvA base URL: https://aichat.uva.nl/v1  (requires valid workspace key)
+    """
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini",
+                 base_url: str | None = None):
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
 
-    def evaluate_text(self, question: str, answer: str) -> bool:
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Je beoordeelt of een antwoord relevant is voor de gegeven vraag. "
-                        "Regels:\n"
-                        "- Een kort feitelijk antwoord is GOED als de vraag een feit vraagt (adres, tijd, bedrag, product, naam).\n"
-                        "- Een antwoord is SLECHT alleen als het volledig irrelevant is, of als de vraag om uitleg vraagt maar het antwoord geen uitleg geeft.\n"
-                        "- Beoordeel NIET op lengte alleen — een kort maar correct antwoord is altijd goed.\n"
-                        "Voorbeelden:\n"
-                        "Vraag: Wat is het adres? Antwoord: Haarlemmerdijk 50 → goed\n"
-                        "Vraag: Hoe laat stapte je binnen? Antwoord: 19:30 → goed\n"
-                        "Vraag: Welk product heb je gekocht? Antwoord: Salade met kip → goed\n"
-                        "Vraag: Licht toe hoe dit verliep. Antwoord: ja → slecht\n"
-                        "Vraag: Licht toe hoe dit verliep. Antwoord: Er was bijna niemand dus ik werd direct geholpen → goed\n"
-                        "Antwoord alleen met het woord 'goed' of 'slecht', niets anders."
-                    ),
-                },
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Vraag: {question}\nAntwoord: {answer}"},
             ],
-            max_tokens=5,
+            max_tokens=60,
             temperature=0,
         )
-        return response.choices[0].message.content.strip().lower() == "goed"
+        return _parse_verdict(response.choices[0].message.content)
+
+
+def _parse_verdict(raw: str) -> tuple[bool, str]:
+    """Parse 'goed: reason' or 'slecht: reason' from LLM output."""
+    text = raw.strip().lower()
+    is_good = text.startswith("goed")
+    reason = raw.strip().split(":", 1)[1].strip() if ":" in raw else raw.strip()
+    return is_good, reason
 
 
 # ── Per-question evaluation ───────────────────────────────────────────────────
@@ -125,88 +134,106 @@ FOLLOW_UP_LABELS = {
 
 
 def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
-                    parent_question: str | None = None) -> str:
+                    parent_question: str | None = None,
+                    parent_answer: str | None = None) -> tuple[str, str]:
+    """Return (verdict, reason). verdict is 'good' or 'bad'."""
     q_type = row["question_type_label"]
     text = row["answer_text"]
     value = row["answer_value"]
     has_text = pd.notna(text) and str(text).strip() != ""
     has_value = pd.notna(value)
 
-    # Structured types: just check something was provided
     if q_type in RULE_BASED_TYPES:
-        return "good" if (has_text or has_value) else "bad"
+        return ("good", "") if (has_text or has_value) else ("bad", "Geen antwoord gegeven")
 
-    # Text type: quick length check first, then LLM
     if q_type == "Tekst":
         if not has_text:
-            return "bad"
-        # For generic follow-up questions, prepend the parent question as context
+            return ("bad", "Geen antwoord gegeven")
+
         label = str(row["description"]).strip().lower().rstrip(".")
         if label in FOLLOW_UP_LABELS and parent_question:
-            question = f'[toelichting op: "{parent_question}"]\n{row["description"]}'
+            # Include previous question + its answer as full context
+            ctx = f'[toelichting op: "{parent_question}"'
+            if parent_answer:
+                ctx += f' → antwoord: "{parent_answer}"'
+            ctx += f']\n{row["description"]}'
+            question = ctx
         else:
             question = row["description"]
-        return "good" if evaluator.evaluate_text(question, str(text)) else "bad"
 
-    return "good"  # unknown type: benefit of the doubt
+        is_good, reason = evaluator.evaluate_text(question, str(text))
+        return ("good" if is_good else "bad"), reason
+
+    return ("good", "")
 
 
 # ── Visit-level verdict ───────────────────────────────────────────────────────
 
 def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) -> dict:
     rows = df[df["visit_id"] == visit_id].copy()
-
-    # Sort by section first, then by question order within each section
     rows = rows.sort_values(["section_id", "question_order"]).reset_index(drop=True)
 
-    # Attach parent question text to every follow-up ("Toelichting") row,
-    # walking back past any consecutive follow-ups to find the real question.
+    # Build parent question + parent answer for every follow-up row
     descriptions = rows["description"].tolist()
-    parent_questions = []
+    raw_answers = rows.apply(
+        lambda r: str(r["answer_text"]) if pd.notna(r["answer_text"])
+                  else (str(r["answer_value"]) if pd.notna(r["answer_value"]) else ""),
+        axis=1
+    ).tolist()
+
+    parent_questions, parent_answers = [], []
     for i, desc in enumerate(descriptions):
         if desc.strip().lower().rstrip(".") in FOLLOW_UP_LABELS and i > 0:
-            parent = None
+            parent_q, parent_a = None, None
             for j in range(i - 1, -1, -1):
                 if descriptions[j].strip().lower().rstrip(".") not in FOLLOW_UP_LABELS:
-                    parent = descriptions[j]
+                    parent_q = descriptions[j]
+                    parent_a = raw_answers[j]
                     break
-            parent_questions.append(parent)
+            parent_questions.append(parent_q)
+            parent_answers.append(parent_a)
         else:
             parent_questions.append(None)
+            parent_answers.append(None)
+
     rows["parent_question"] = parent_questions
+    rows["parent_answer"] = parent_answers
 
-    rows["verdict"] = rows.apply(
-        lambda r: evaluate_answer(r, evaluator, r["parent_question"]), axis=1
+    results = rows.apply(
+        lambda r: evaluate_answer(r, evaluator, r["parent_question"], r["parent_answer"]),
+        axis=1
     )
+    rows["verdict"] = results.apply(lambda x: x[0])
+    rows["reason"]  = results.apply(lambda x: x[1])
 
-    text_rows = rows[rows["question_type_label"] == "Tekst"]
+    text_rows       = rows[rows["question_type_label"] == "Tekst"]
     structured_rows = rows[rows["question_type_label"] != "Tekst"]
 
-    text_good = (text_rows["verdict"] == "good").sum()
-    text_total = len(text_rows)
-    text_pct = text_good / text_total if text_total > 0 else 1.0
+    text_good   = (text_rows["verdict"] == "good").sum()
+    text_total  = len(text_rows)
+    text_pct    = text_good / text_total if text_total > 0 else 1.0
 
-    struct_good = (structured_rows["verdict"] == "good").sum()
+    struct_good  = (structured_rows["verdict"] == "good").sum()
     struct_total = len(structured_rows)
-    struct_pct = struct_good / struct_total if struct_total > 0 else 1.0
+    struct_pct   = struct_good / struct_total if struct_total > 0 else 1.0
 
     passed = text_pct >= TEXT_THRESHOLD and struct_pct >= STRUCTURED_THRESHOLD
 
     return {
-        "visit_id": visit_id,
+        "visit_id":       visit_id,
         "total_questions": len(rows),
-        "good": int((rows["verdict"] == "good").sum()),
-        "bad": int((rows["verdict"] == "bad").sum()),
-        "text_good": int(text_good),
-        "text_total": int(text_total),
-        "text_pct": round(text_pct * 100, 1),
-        "struct_good": int(struct_good),
-        "struct_total": int(struct_total),
-        "struct_pct": round(struct_pct * 100, 1),
-        "verdict": "PASS" if passed else "FAIL",
-        "details": rows[["qaas_question_id", "question_order", "description",
-                          "parent_question", "question_type_label",
-                          "answer_text", "answer_value", "verdict"]],
+        "good":           int((rows["verdict"] == "good").sum()),
+        "bad":            int((rows["verdict"] == "bad").sum()),
+        "text_good":      int(text_good),
+        "text_total":     int(text_total),
+        "text_pct":       round(text_pct * 100, 1),
+        "struct_good":    int(struct_good),
+        "struct_total":   int(struct_total),
+        "struct_pct":     round(struct_pct * 100, 1),
+        "verdict":        "PASS" if passed else "FAIL",
+        "details":        rows[["qaas_question_id", "question_order", "description",
+                                 "parent_question", "parent_answer", "question_type_label",
+                                 "answer_text", "answer_value", "verdict", "reason"]],
     }
 
 
@@ -221,9 +248,18 @@ def print_visit_report(report: dict) -> None:
         icon = "✓" if row["verdict"] == "good" else "✗"
         ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
         q = str(row["description"])[:72]
-        context = f'  [re: "{str(row["parent_question"])[:60]}"]' if pd.notna(row["parent_question"]) else ""
+        is_text = row["question_type_label"] == "Tekst"
+
+        if pd.notna(row["parent_question"]):
+            parent_a = f' → "{str(row["parent_answer"])}"' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]) else ""
+            context = f'  [re: "{str(row["parent_question"])[:50]}"{parent_a}]'
+        else:
+            context = ""
+
         print(f"  {icon} Q{row['qaas_question_id']:>3} [{row['question_type_label']}]: {q}{context}")
         print(f"         -> {ans}")
+        if is_text and row["reason"]:
+            print(f"         ℹ  {row['reason']}")
     print()
 
 
@@ -233,14 +269,11 @@ def run_accuracy_test(df: pd.DataFrame, visits: pd.DataFrame,
                       evaluator: AnswerEvaluator, n: int = 20) -> None:
     import json, os
 
-    # Only visits with a clear human verdict
-    clear = visits[visits["visit_status"].isin(["Goedgekeurd", "Afgekeurd"])].copy()
-    # Include all 4 Afgekeurd + fill up to n with Goedgekeurd
+    clear    = visits[visits["visit_status"].isin(["Goedgekeurd", "Afgekeurd"])].copy()
     declined = clear[clear["visit_status"] == "Afgekeurd"]
     approved = clear[clear["visit_status"] == "Goedgekeurd"].head(n - len(declined))
-    sample = pd.concat([declined, approved]).sort_values("id").head(n)
+    sample   = pd.concat([declined, approved]).sort_values("id").head(n)
 
-    # Cache results to avoid re-calling the API on reruns
     cache_path = "verdict_cache.json"
     cache = json.load(open(cache_path)) if os.path.exists(cache_path) else {}
 
@@ -257,51 +290,39 @@ def run_accuracy_test(df: pd.DataFrame, visits: pd.DataFrame,
 
         ground_truth = "PASS" if visit["visit_status"] == "Goedgekeurd" else "FAIL"
         match = llm_verdict == ground_truth
-        results.append({
-            "visit_id": visit["id"],
-            "date": visit["date"],
-            "ground_truth": ground_truth,
-            "llm_verdict": llm_verdict,
-            "correct": match,
-        })
-        status = "✓" if match else "✗"
-        print(f"  {status} Visit {visit['id']:>3}  GT: {ground_truth:<4}  LLM: {llm_verdict}")
+        results.append({"visit_id": visit["id"], "ground_truth": ground_truth,
+                         "llm_verdict": llm_verdict, "correct": match})
+        print(f"  {'✓' if match else '✗'} Visit {visit['id']:>3}  GT: {ground_truth:<4}  LLM: {llm_verdict}")
 
     correct = sum(r["correct"] for r in results)
-    total = len(results)
-    print()
-    print("=" * 40)
-    print(f"Accuracy: {correct}/{total} = {correct/total*100:.1f}%")
-
-    tp = sum(1 for r in results if r["ground_truth"] == "PASS" and r["llm_verdict"] == "PASS")
-    tn = sum(1 for r in results if r["ground_truth"] == "FAIL" and r["llm_verdict"] == "FAIL")
-    fp = sum(1 for r in results if r["ground_truth"] == "FAIL" and r["llm_verdict"] == "PASS")
-    fn = sum(1 for r in results if r["ground_truth"] == "PASS" and r["llm_verdict"] == "FAIL")
+    total   = len(results)
+    print(f"\n{'='*40}\nAccuracy: {correct}/{total} = {correct/total*100:.1f}%")
+    tp = sum(1 for r in results if r["ground_truth"]=="PASS" and r["llm_verdict"]=="PASS")
+    tn = sum(1 for r in results if r["ground_truth"]=="FAIL" and r["llm_verdict"]=="FAIL")
+    fp = sum(1 for r in results if r["ground_truth"]=="FAIL" and r["llm_verdict"]=="PASS")
+    fn = sum(1 for r in results if r["ground_truth"]=="PASS" and r["llm_verdict"]=="FAIL")
     print(f"  Correct PASS (TP): {tp}  |  Correct FAIL (TN): {tn}")
-    print(f"  Wrong   PASS (FP): {fp}  |  Wrong   FAIL (FN): {fn}")
-    print("=" * 40)
+    print(f"  Wrong   PASS (FP): {fp}  |  Wrong   FAIL (FN): {fn}\n{'='*40}")
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 def load_data() -> pd.DataFrame:
     questions = pd.read_csv("qaas_questions_rows.csv")
-    answers = pd.read_csv("answer_rows.csv")
-    visits = pd.read_csv("visit_rows.csv")
+    answers   = pd.read_csv("answer_rows.csv")
+    visits    = pd.read_csv("visit_rows.csv")
 
     df = (
         answers
         .merge(
             questions[["id", "description", "category", "question_type_label",
                         "section_id", "question_order"]],
-            left_on="qaas_question_id",
-            right_on="id",
+            left_on="qaas_question_id", right_on="id",
             suffixes=("_answer", "_question"),
         )
         .merge(
             visits[["id", "date", "visit_status", "visitor_id", "assignment_location_id"]],
-            left_on="visit_id",
-            right_on="id",
+            left_on="visit_id", right_on="id",
             suffixes=("", "_visit"),
         )
     )
@@ -319,18 +340,19 @@ def load_data() -> pd.DataFrame:
 if __name__ == "__main__":
     import os
 
-    df = load_data()
+    df     = load_data()
     visits = pd.read_csv("visit_rows.csv")
 
     # ── Choose your evaluator ──────────────────────────────────────────────────
-    # Option 1 (NOW):   Groq — free, get key at https://console.groq.com/keys
-    # Option 2 (LATER): OpenAIEvaluator(api_key=os.environ["OPENAI_API_KEY"])
-    # Option 3:         HuggingFaceEvaluator(hf_token=os.environ["HF_TOKEN"])
+    # Option 1 (active): Groq — free, get key at https://console.groq.com/keys
+    # Option 2 (UvA):    OpenAIEvaluator(api_key=os.environ["OPENAI_API_KEY"],
+    #                        base_url="https://aichat.uva.nl/v1", model="gpt-4o-mini")
+    #                    Requires a valid UvA workspace key from aichat-mgmt.uva.nl
+    # Option 3 (OpenAI): OpenAIEvaluator(api_key=os.environ["OPENAI_API_KEY"])
     # ──────────────────────────────────────────────────────────────────────────
     evaluator = GroqEvaluator(api_key=os.environ["GROQ_API_KEY"])
 
-    #VISIT_ID = 43
-    VISIT_ID = 38
+    VISIT_ID = 43
     report = evaluate_visit(VISIT_ID, df, evaluator)
     print_visit_report(report)
 
