@@ -20,7 +20,8 @@ def get_data():
 
 @st.cache_resource
 def get_evaluator():
-    return GroqEvaluator(api_key=os.environ["GROQ_API_KEY"])
+    api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+    return GroqEvaluator(api_key=api_key)
 
 df = get_data()
 evaluator = get_evaluator()
