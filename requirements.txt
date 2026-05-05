@@ -3,3 +3,4 @@ python-dotenv
 groq
 openai
 streamlit
+supabase

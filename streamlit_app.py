@@ -5,14 +5,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from Agent1 import load_data, evaluate_visit, GroqEvaluator, RULE_BASED_TYPES
+from Agent1 import load_data, evaluate_visit, GroqEvaluator
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="QA Visit Evaluator", layout="wide")
 st.title("QA Visit Evaluator")
 
-# ── Load data once ────────────────────────────────────────────────────────────
+# ── Name gate ─────────────────────────────────────────────────────────────────
+
+if "user_name" not in st.session_state:
+    st.session_state.user_name = ""
+
+if not st.session_state.user_name:
+    st.text_input("Enter your name to continue:", key="name_input")
+    if st.button("Continue") and st.session_state.name_input.strip():
+        st.session_state.user_name = st.session_state.name_input.strip()
+        st.rerun()
+    st.stop()
+
+is_nigel = st.session_state.user_name.strip().lower() == "nigel"
+
+# ── Cached resources ──────────────────────────────────────────────────────────
 
 @st.cache_data
 def get_data():
@@ -23,82 +37,148 @@ def get_evaluator():
     api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
     return GroqEvaluator(api_key=api_key)
 
+@st.cache_resource
+def get_supabase():
+    from supabase import create_client
+    url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
+    return create_client(url, key)
+
 df = get_data()
 evaluator = get_evaluator()
-
 available_ids = sorted(df["visit_id"].unique())
 
-# ── Sidebar input ─────────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    st.caption(f"Logged in as: **{st.session_state.user_name}**")
+    if st.button("Change name", use_container_width=True):
+        st.session_state.user_name = ""
+        st.rerun()
+    st.divider()
     st.header("Select visit")
     visit_id = st.selectbox("Visit ID", available_ids)
     run = st.button("Evaluate", type="primary", use_container_width=True)
 
-# ── Main panel ────────────────────────────────────────────────────────────────
+# ── Run evaluation ────────────────────────────────────────────────────────────
 
 if run:
     with st.spinner(f"Evaluating visit {visit_id}…"):
         report = evaluate_visit(visit_id, df, evaluator)
+    st.session_state.report = report
+    st.session_state.saved_ratings = {}
 
-    details = report["details"]
+# ── Main panel ────────────────────────────────────────────────────────────────
 
-    # ── Verdict banner ────────────────────────────────────────────────────────
-    verdict = report["verdict"]
-    color = "green" if verdict == "PASS" else "red"
-    st.markdown(
-        f"<h2 style='color:{color}'>{'✅ PASS' if verdict == 'PASS' else '❌ FAIL'}</h2>",
-        unsafe_allow_html=True,
-    )
-    m1, m2 = st.columns(2)
-    m1.metric("Structured answers", f"{report['struct_good']}/{report['struct_total']}",
-              f"{report['struct_pct']}% (threshold 90%)")
-    m2.metric("Text answers", f"{report['text_good']}/{report['text_total']}",
-              f"{report['text_pct']}% (threshold 70%)")
-    st.divider()
-
-    text_rows = details[details["question_type_label"] == "Tekst"]
-    structured_rows = details[details["question_type_label"] != "Tekst"]
-
-    col1, col2 = st.columns(2)
-
-    # ── Structured questions summary ──────────────────────────────────────────
-    with col1:
-        st.subheader("Structured questions")
-        total_s = len(structured_rows)
-        good_s = (structured_rows["verdict"] == "good").sum()
-        st.caption(f"{good_s}/{total_s} answered")
-
-        for _, row in structured_rows.iterrows():
-            ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
-            icon = "✅" if row["verdict"] == "good" else "❌"
-            st.markdown(f"{icon} **[{row['question_type_label']}]** {row['description']}")
-            st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;→ `{ans}`")
-
-    # ── Text questions with LLM decision ──────────────────────────────────────
-    with col2:
-        st.subheader("Text questions (LLM evaluated)")
-        total_t = len(text_rows)
-        good_t = (text_rows["verdict"] == "good").sum()
-        st.caption(f"{good_t}/{total_t} good")
-
-        for _, row in text_rows.iterrows():
-            verdict_icon = "✅" if row["verdict"] == "good" else "❌"
-            has_parent = pd.notna(row["parent_question"])
-
-            with st.expander(
-                f"{verdict_icon} Q{row['qaas_question_id']} — {row['description']}",
-                expanded=(row["verdict"] == "bad"),
-            ):
-                if pd.notna(row["parent_question"]):
-                    parent_a_str = f' → **"{str(row["parent_answer"])}"**' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip() else ""
-                    st.caption(f"Follow-up on: *{row['parent_question']}*{parent_a_str}")
-                ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
-                st.markdown(f"**Answer:** {ans}")
-                badge = "🟢 Good" if row["verdict"] == "good" else "🔴 Bad"
-                st.markdown(f"**LLM verdict:** {badge}")
-                if row["reason"]:
-                    st.caption(f"ℹ️ {row['reason']}")
-
-else:
+if "report" not in st.session_state:
     st.info("Select a visit ID in the sidebar and click **Evaluate**.")
+    st.stop()
+
+report = st.session_state.report
+details = report["details"]
+
+# Verdict banner
+verdict = report["verdict"]
+color = "green" if verdict == "PASS" else "red"
+st.markdown(
+    f"<h2 style='color:{color}'>{'✅ PASS' if verdict == 'PASS' else '❌ FAIL'}</h2>",
+    unsafe_allow_html=True,
+)
+m1, m2 = st.columns(2)
+m1.metric("Structured answers", f"{report['struct_good']}/{report['struct_total']}",
+          f"{report['struct_pct']}% (threshold 90%)")
+m2.metric("Text answers", f"{report['text_good']}/{report['text_total']}",
+          f"{report['text_pct']}% (threshold 70%)")
+st.divider()
+
+text_rows = details[details["question_type_label"] == "Tekst"]
+structured_rows = details[details["question_type_label"] != "Tekst"]
+
+col1, col2 = st.columns(2)
+
+# ── Structured questions ──────────────────────────────────────────────────────
+
+with col1:
+    st.subheader("Structured questions")
+    good_s = (structured_rows["verdict"] == "good").sum()
+    st.caption(f"{good_s}/{len(structured_rows)} answered")
+
+    for _, row in structured_rows.iterrows():
+        ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
+        icon = "✅" if row["verdict"] == "good" else "❌"
+        st.markdown(f"{icon} **[{row['question_type_label']}]** {row['description']}")
+        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;→ `{ans}`")
+
+# ── Text questions ────────────────────────────────────────────────────────────
+
+with col2:
+    if is_nigel:
+        st.subheader("Text questions (LLM evaluated) — Nigel mode 🔑")
+    else:
+        st.subheader("Text questions (LLM evaluated)")
+
+    good_t = (text_rows["verdict"] == "good").sum()
+    st.caption(f"{good_t}/{len(text_rows)} good")
+
+    for _, row in text_rows.iterrows():
+        qid = int(row["qaas_question_id"])
+        verdict_icon = "✅" if row["verdict"] == "good" else "❌"
+        ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
+
+        with st.expander(
+            f"{verdict_icon} Q{qid} — {row['description']}",
+            expanded=(row["verdict"] == "bad"),
+        ):
+            if pd.notna(row["parent_question"]):
+                parent_a_str = f' → **"{str(row["parent_answer"])}"**' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip() else ""
+                st.caption(f"Follow-up on: *{row['parent_question']}*{parent_a_str}")
+
+            st.markdown(f"**Answer:** {ans}")
+            badge = "🟢 Good" if row["verdict"] == "good" else "🔴 Bad"
+            st.markdown(f"**LLM verdict:** {badge}")
+            if row["reason"]:
+                st.caption(f"ℹ️ {row['reason']}")
+
+            # ── Nigel rating controls ─────────────────────────────────────────
+            if is_nigel:
+                st.divider()
+                saved = st.session_state.get("saved_ratings", {}).get(qid)
+                if saved:
+                    saved_label = "✅ Agree" if saved["rating"] == "agree" else "❌ Disagree"
+                    msg = f"Saved: **{saved_label}**"
+                    if saved["comment"]:
+                        msg += f' — *"{saved["comment"]}"*'
+                    st.success(msg)
+                else:
+                    rating = st.radio(
+                        "Rate LLM decision:",
+                        ["agree", "disagree"],
+                        key=f"rating_{qid}",
+                        horizontal=True,
+                    )
+                    comment = st.text_area(
+                        "Comment (optional):",
+                        key=f"comment_{qid}",
+                        height=68,
+                    )
+                    if st.button("Save rating", key=f"save_{qid}"):
+                        supabase = get_supabase()
+                        supabase.table("llm_reviews").insert({
+                            "visit_id":         int(report["visit_id"]),
+                            "qaas_question_id": qid,
+                            "question_text":    str(row["description"]),
+                            "parent_question":  str(row["parent_question"]) if pd.notna(row["parent_question"]) else None,
+                            "parent_answer":    str(row["parent_answer"])   if pd.notna(row["parent_answer"])   else None,
+                            "shopper_answer":   str(ans),
+                            "llm_verdict":      str(row["verdict"]),
+                            "llm_reason":       str(row["reason"]) if row["reason"] else None,
+                            "nigel_rating":     rating,
+                            "nigel_comment":    comment.strip() if comment.strip() else None,
+                        }).execute()
+                        if "saved_ratings" not in st.session_state:
+                            st.session_state.saved_ratings = {}
+                        st.session_state.saved_ratings[qid] = {
+                            "rating": rating,
+                            "comment": comment.strip(),
+                        }
+                        st.rerun()
