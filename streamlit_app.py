@@ -64,17 +64,15 @@ with st.sidebar:
     st.header("Select visit")
     visit_id = st.selectbox("Visit ID", available_ids)
     run = st.button("Evaluate", type="primary", use_container_width=True)
+    analyse_photos = st.button("Analyse Photos 📸", use_container_width=True)
 
 # ── Run evaluation ────────────────────────────────────────────────────────────
 
 if run:
     with st.spinner(f"Evaluating visit {visit_id}…"):
         report = evaluate_visit(visit_id, df, evaluator)
-    with st.spinner("Analysing photos…"):
-        questions_d, assignments_d, answers_d, visits_d = get_photo_data()
-        photo_result = analyse_visit_photos(visit_id, questions_d, assignments_d, answers_d, visits_d)
     st.session_state.report = report
-    st.session_state.photo_result = photo_result
+    st.session_state.photo_result = None
     st.session_state.saved_ratings = {}
 
 # ── Main panel ────────────────────────────────────────────────────────────────
@@ -203,38 +201,52 @@ def photo_verdict_icon(analysis: str) -> str:
     else:
         return "⚠️"
 
-if "photo_result" in st.session_state:
-    pr = st.session_state.photo_result
-    st.divider()
-    st.subheader("📸 Photo analysis")
+if "report" in st.session_state and analyse_photos:
+    with st.spinner("Analysing photos… (this may take a minute)"):
+        try:
+            questions_d, assignments_d, answers_d, visits_d = get_photo_data()
+            photo_result = analyse_visit_photos(
+                st.session_state.report["visit_id"],
+                questions_d, assignments_d, answers_d, visits_d
+            )
+            st.session_state.photo_result = photo_result
+        except Exception as e:
+            st.error(f"Photo analysis failed: {e}")
 
-    if "error" in pr:
-        st.warning("No matching assignment found for this visit.")
+st.divider()
+st.subheader("📸 Photo analysis")
+
+pr = st.session_state.get("photo_result")
+
+if pr is None:
+    st.info("Click **Analyse Photos** in the sidebar to run photo analysis.")
+elif "error" in pr:
+    st.warning("No matching assignment found for this visit.")
+else:
+    st.caption(f"Assignment: **{pr['assignment']}** — {pr['products']}")
+
+    if pr["receipts"]:
+        st.markdown("**Receipt**")
+        for r in pr["receipts"]:
+            icon = photo_verdict_icon(r["analysis"])
+            with st.expander(f"{icon} {r['file']}", expanded=True):
+                col_img, col_text = st.columns([1, 2])
+                with col_img:
+                    if r.get("path"):
+                        st.image(r["path"])
+                with col_text:
+                    st.text(r["analysis"])
     else:
-        st.caption(f"Assignment: **{pr['assignment']}** — {pr['products']}")
+        st.info("No receipt photo found for this visit.")
 
-        if pr["receipts"]:
-            st.markdown("**Receipt**")
-            for r in pr["receipts"]:
-                icon = photo_verdict_icon(r["analysis"])
-                with st.expander(f"{icon} {r['file']}", expanded=True):
-                    col_img, col_text = st.columns([1, 2])
-                    with col_img:
-                        if r.get("path"):
-                            st.image(r["path"])
-                    with col_text:
-                        st.text(r["analysis"])
-        else:
-            st.info("No receipt photo found for this visit.")
-
-        if pr["questionnaire_photos"]:
-            st.markdown("**Meal / questionnaire photos**")
-            for r in pr["questionnaire_photos"]:
-                icon = photo_verdict_icon(r["analysis"])
-                with st.expander(f"{icon} {r['file']}", expanded=True):
-                    col_img, col_text = st.columns([1, 2])
-                    with col_img:
-                        if r.get("path"):
-                            st.image(r["path"])
-                    with col_text:
-                        st.text(r["analysis"])
+    if pr["questionnaire_photos"]:
+        st.markdown("**Meal / questionnaire photos**")
+        for r in pr["questionnaire_photos"]:
+            icon = photo_verdict_icon(r["analysis"])
+            with st.expander(f"{icon} {r['file']}", expanded=False):
+                col_img, col_text = st.columns([1, 2])
+                with col_img:
+                    if r.get("path"):
+                        st.image(r["path"])
+                with col_text:
+                    st.text(r["analysis"])
