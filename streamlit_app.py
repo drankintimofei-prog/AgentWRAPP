@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from Agent1 import load_data, evaluate_visit, GroqEvaluator
+from image_analysis import load_all_data, analyse_visit_photos
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -31,6 +32,10 @@ is_nigel = st.session_state.user_name.strip().lower() == "nigel"
 @st.cache_data
 def get_data():
     return load_data()
+
+@st.cache_data
+def get_photo_data():
+    return load_all_data()
 
 @st.cache_resource
 def get_evaluator():
@@ -65,7 +70,11 @@ with st.sidebar:
 if run:
     with st.spinner(f"Evaluating visit {visit_id}…"):
         report = evaluate_visit(visit_id, df, evaluator)
+    with st.spinner("Analysing photos…"):
+        questions_d, assignments_d, answers_d, visits_d = get_photo_data()
+        photo_result = analyse_visit_photos(visit_id, questions_d, assignments_d, answers_d, visits_d)
     st.session_state.report = report
+    st.session_state.photo_result = photo_result
     st.session_state.saved_ratings = {}
 
 # ── Main panel ────────────────────────────────────────────────────────────────
@@ -139,7 +148,7 @@ with col2:
             if row["reason"]:
                 st.caption(f"ℹ️ {row['reason']}")
 
-            # ── Nigel rating controls ─────────────────────────────────────────
+            # ── Nigel rating controls ──────────────────────────────────────────
             if is_nigel:
                 st.divider()
                 saved = st.session_state.get("saved_ratings", {}).get(qid)
@@ -182,3 +191,33 @@ with col2:
                             "comment": comment.strip(),
                         }
                         st.rerun()
+
+# ── Photo analysis ────────────────────────────────────────────────────────────
+
+if "photo_result" in st.session_state:
+    pr = st.session_state.photo_result
+    st.divider()
+    st.subheader("📸 Photo analysis")
+
+    if "error" in pr:
+        st.warning(f"No matching assignment found for this visit.")
+    else:
+        st.caption(f"Assignment: **{pr['assignment']}** — {pr['products']}")
+
+        if pr["receipts"]:
+            st.markdown("**Receipt**")
+            for r in pr["receipts"]:
+                with st.expander(f"🧾 {r['file']}", expanded=True):
+                    st.text(r["analysis"])
+        else:
+            st.info("No receipt photo found for this visit.")
+
+        if pr["questionnaire_photos"]:
+            st.markdown("**Meal / questionnaire photos**")
+            for r in pr["questionnaire_photos"]:
+                with st.expander(f"🖼 {r['file']}", expanded=True):
+                    col_img, col_text = st.columns([1, 2])
+                    with col_img:
+                        st.image(r["path"])
+                    with col_text:
+                        st.text(r["analysis"])
