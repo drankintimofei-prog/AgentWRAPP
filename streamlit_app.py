@@ -194,28 +194,43 @@ with col2:
 
 # ── Photo analysis ────────────────────────────────────────────────────────────
 
+def photo_verdict_icon(analysis: str) -> str:
+    text = analysis.upper()
+    if "CORRECT AFGEROND" in text or "PASSEND" in text:
+        return "✅"
+    elif "NIET CORRECT" in text or "NIET PASSEND" in text:
+        return "❌"
+    else:
+        return "⚠️"
+
 if "photo_result" in st.session_state:
     pr = st.session_state.photo_result
     st.divider()
     st.subheader("📸 Photo analysis")
 
     if "error" in pr:
-        st.warning(f"No matching assignment found for this visit.")
+        st.warning("No matching assignment found for this visit.")
     else:
         st.caption(f"Assignment: **{pr['assignment']}** — {pr['products']}")
 
         if pr["receipts"]:
             st.markdown("**Receipt**")
             for r in pr["receipts"]:
-                with st.expander(f"🧾 {r['file']}", expanded=True):
-                    st.text(r["analysis"])
+                icon = photo_verdict_icon(r["analysis"])
+                with st.expander(f"{icon} {r['file']}", expanded=True):
+                    col_img, col_text = st.columns([1, 2])
+                    with col_img:
+                        st.image(r["path"])
+                    with col_text:
+                        st.text(r["analysis"])
         else:
             st.info("No receipt photo found for this visit.")
 
         if pr["questionnaire_photos"]:
             st.markdown("**Meal / questionnaire photos**")
             for r in pr["questionnaire_photos"]:
-                with st.expander(f"🖼 {r['file']}", expanded=True):
+                icon = photo_verdict_icon(r["analysis"])
+                with st.expander(f"{icon} {r['file']}", expanded=True):
                     col_img, col_text = st.columns([1, 2])
                     with col_img:
                         st.image(r["path"])

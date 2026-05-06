@@ -170,7 +170,7 @@ def analyse_visit_photos(visit_id: int,
 
     for path in receipt_photos:
         analysis = analyse_photo(path, assignment, visit, "receipt")
-        results["receipts"].append({"file": os.path.basename(path), "analysis": analysis})
+        results["receipts"].append({"file": os.path.basename(path), "path": path, "analysis": analysis})
 
     for path in questionnaire_photos:
         analysis = analyse_photo(path, assignment, visit, "questionnaire")
