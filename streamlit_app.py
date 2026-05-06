@@ -220,7 +220,8 @@ if "photo_result" in st.session_state:
                 with st.expander(f"{icon} {r['file']}", expanded=True):
                     col_img, col_text = st.columns([1, 2])
                     with col_img:
-                        st.image(r["path"])
+                        if r.get("path"):
+                            st.image(r["path"])
                     with col_text:
                         st.text(r["analysis"])
         else:
@@ -233,6 +234,7 @@ if "photo_result" in st.session_state:
                 with st.expander(f"{icon} {r['file']}", expanded=True):
                     col_img, col_text = st.columns([1, 2])
                     with col_img:
-                        st.image(r["path"])
+                        if r.get("path"):
+                            st.image(r["path"])
                     with col_text:
                         st.text(r["analysis"])
