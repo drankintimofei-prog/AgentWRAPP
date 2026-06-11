@@ -145,6 +145,8 @@ FOLLOW_UP_LABELS = {
     "licht je score toe",
     "licht je antwoord toe",
 }
+# Questions asking for a factual value — any non-empty answer is always good
+FACTUAL_KEYWORDS = {"adres", "naam", "bedrag", "uitgegeven", "medewerker"}
 
 
 def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
@@ -163,6 +165,10 @@ def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
     if q_type == "Tekst":
         if not has_text:
             return ("bad", "Geen antwoord gegeven")
+
+        desc_lower = str(row["description"]).lower()
+        if any(kw in desc_lower for kw in FACTUAL_KEYWORDS):
+            return ("good", "")
 
         label = str(row["description"]).strip().lower().rstrip(".")
         if label in FOLLOW_UP_LABELS and parent_question:
