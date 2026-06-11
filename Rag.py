@@ -13,7 +13,7 @@ Usage
 
 from __future__ import annotations
 
-import argparse, json, os, time
+import argparse, json, os, time, uuid
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -236,17 +236,26 @@ def compare_agents(k: int = K_EXAMPLES) -> None:
     if not groq_key:
         raise RuntimeError("GROQ_API_KEY not set in environment.")
 
+    # Unique ID per run so cache never carries over between runs
+    run_id = uuid.uuid4().hex[:8]
+
     print("=" * 60)
+    print(f"Run ID: {run_id}")
     print("Loading llm_reviews from Supabase ...")
     df = load_reviews()
     train_df, full_test = split_train_test(df)
+    # Sample 20 fresh rows every run (random_state=None → different each time)
+    test_df = full_test.sample(n=20, random_state=None).reset_index(drop=True)
 
-    # Keep only rows Nigel marked as truly "bad", take 10
-    bad_rows = full_test[full_test["true_verdict"] == "bad"]
-    test_df  = bad_rows.sample(n=min(10, len(bad_rows)), random_state=TRAIN_SEED).reset_index(drop=True)
-
-    print(f"Train: {len(train_df)} rows")
-    print(f"Test : {len(test_df)} rows  (all true_verdict='bad', Nigel-corrected)")
+    n_agree    = (train_df["nigel_rating"] == "agree").sum()
+    n_disagree = (train_df["nigel_rating"] == "disagree").sum()
+    n_good     = (train_df["true_verdict"] == "good").sum()
+    n_bad      = (train_df["true_verdict"] == "bad").sum()
+    print(f"Train: {len(train_df)} rows  "
+          f"(Nigel agree={n_agree}, disagree={n_disagree} | good={n_good}, bad={n_bad})")
+    print(f"Test : {len(test_df)}/111 sampled rows  "
+          f"(good={(test_df['true_verdict']=='good').sum()}, "
+          f"bad={(test_df['true_verdict']=='bad').sum()})")
     print("=" * 60)
 
     index = RAGIndex(train_df)
@@ -258,10 +267,10 @@ def compare_agents(k: int = K_EXAMPLES) -> None:
     cache = json.load(open(CACHE_FILE)) if os.path.exists(CACHE_FILE) else {}
 
     print(f"\nRunning Agent1 (baseline) on {len(test_df)} test rows ...\n")
-    res_agent1 = _run_evaluator_on_test(test_df, agent1_evaluator, "Agent1", cache, "a1")
+    res_agent1 = _run_evaluator_on_test(test_df, agent1_evaluator, "Agent1", cache, f"a1_{run_id}")
 
     print(f"\nRunning RAG evaluator (k={k}) on {len(test_df)} test rows ...\n")
-    res_rag = _run_evaluator_on_test(test_df, rag_evaluator, "RAG", cache, f"rag_k{k}")
+    res_rag = _run_evaluator_on_test(test_df, rag_evaluator, "RAG", cache, f"rag_k{k}_{run_id}")
 
     print("\n" + "=" * 60)
     print("RESULTS  (ground truth = Nigel-corrected verdict)")
