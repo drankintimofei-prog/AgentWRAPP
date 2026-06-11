@@ -175,7 +175,7 @@ with col2:
                 else:
                     rating = st.radio(
                         "Rate LLM decision:",
-                        ["agree", "disagree", "unsure"],
+                        ["agree", "disagree"],
                         key=f"rating_{qid}",
                         horizontal=True,
                     )
