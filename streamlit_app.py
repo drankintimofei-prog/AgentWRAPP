@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from Agent1 import load_data, evaluate_visit, GroqEvaluator
+from agent1gpt import load_data, evaluate_visit, OpenAIEvaluator
 from image_analysis import load_all_data, analyse_visit_photos
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -39,8 +39,9 @@ def get_photo_data():
 
 @st.cache_resource
 def get_evaluator():
-    api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-    return GroqEvaluator(api_key=api_key)
+    api_key  = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    base_url = st.secrets.get("UVA_API_BASE")   or os.environ.get("UVA_API_BASE") or None
+    return OpenAIEvaluator(api_key=api_key, base_url=base_url, model="gpt-4o")
 
 @st.cache_resource
 def get_supabase():
@@ -66,6 +67,14 @@ with st.sidebar:
     run = st.button("Evaluate", type="primary", use_container_width=True)
     analyse_photos = st.button("Analyse Photos 📸", use_container_width=True)
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def verdict_icon(v: str) -> str:
+    return {"good": "✅", "bad": "❌", "unsure": "🟡"}.get(v, "❌")
+
+def verdict_badge(v: str) -> str:
+    return {"good": "🟢 Good", "bad": "🔴 Bad", "unsure": "🟡 Unsure"}.get(v, "🔴 Bad")
+
 # ── Run evaluation ────────────────────────────────────────────────────────────
 
 if run:
@@ -85,17 +94,18 @@ report = st.session_state.report
 details = report["details"]
 
 # Verdict banner
-verdict = report["verdict"]
-color = "green" if verdict == "PASS" else "red"
+visit_verdict = report["verdict"]
+color = "green" if visit_verdict == "PASS" else "red"
 st.markdown(
-    f"<h2 style='color:{color}'>{'✅ PASS' if verdict == 'PASS' else '❌ FAIL'}</h2>",
+    f"<h2 style='color:{color}'>{'✅ PASS' if visit_verdict == 'PASS' else '❌ FAIL'}</h2>",
     unsafe_allow_html=True,
 )
-m1, m2 = st.columns(2)
+m1, m2, m3 = st.columns(3)
 m1.metric("Structured answers", f"{report['struct_good']}/{report['struct_total']}",
           f"{report['struct_pct']}% (threshold 90%)")
-m2.metric("Text answers", f"{report['text_good']}/{report['text_total']}",
+m2.metric("Text answers (good)", f"{report['text_good']}/{report['text_total']}",
           f"{report['text_pct']}% (threshold 70%)")
+m3.metric("Unsure answers", report["unsure"])
 st.divider()
 
 text_rows = details[details["question_type_label"] == "Tekst"]
@@ -112,7 +122,7 @@ with col1:
 
     for _, row in structured_rows.iterrows():
         ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
-        icon = "✅" if row["verdict"] == "good" else "❌"
+        icon = verdict_icon(row["verdict"])
         st.markdown(f"{icon} **[{row['question_type_label']}]** {row['description']}")
         st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;→ `{ans}`")
 
@@ -124,25 +134,30 @@ with col2:
     else:
         st.subheader("Text questions (LLM evaluated)")
 
-    good_t = (text_rows["verdict"] == "good").sum()
-    st.caption(f"{good_t}/{len(text_rows)} good")
+    good_t   = (text_rows["verdict"] == "good").sum()
+    unsure_t = (text_rows["verdict"] == "unsure").sum()
+    bad_t    = (text_rows["verdict"] == "bad").sum()
+    st.caption(f"{good_t} good · {unsure_t} unsure · {bad_t} bad")
 
     for _, row in text_rows.iterrows():
         qid = int(row["qaas_question_id"])
-        verdict_icon = "✅" if row["verdict"] == "good" else "❌"
+        icon = verdict_icon(row["verdict"])
         ans = row["answer_text"] if pd.notna(row["answer_text"]) else row["answer_value"]
 
         with st.expander(
-            f"{verdict_icon} Q{qid} — {row['description']}",
-            expanded=(row["verdict"] == "bad"),
+            f"{icon} Q{qid} — {row['description']}",
+            expanded=(row["verdict"] != "good"),
         ):
             if pd.notna(row["parent_question"]):
-                parent_a_str = f' → **"{str(row["parent_answer"])}"**' if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip() else ""
+                parent_a_str = (
+                    f' → **"{str(row["parent_answer"])}"**'
+                    if pd.notna(row["parent_answer"]) and str(row["parent_answer"]).strip()
+                    else ""
+                )
                 st.caption(f"Follow-up on: *{row['parent_question']}*{parent_a_str}")
 
             st.markdown(f"**Answer:** {ans}")
-            badge = "🟢 Good" if row["verdict"] == "good" else "🔴 Bad"
-            st.markdown(f"**LLM verdict:** {badge}")
+            st.markdown(f"**LLM verdict:** {verdict_badge(row['verdict'])}")
             if row["reason"]:
                 st.caption(f"ℹ️ {row['reason']}")
 
@@ -151,7 +166,8 @@ with col2:
                 st.divider()
                 saved = st.session_state.get("saved_ratings", {}).get(qid)
                 if saved:
-                    saved_label = "✅ Agree" if saved["rating"] == "agree" else "❌ Disagree"
+                    label_map = {"agree": "✅ Agree", "disagree": "❌ Disagree", "unsure": "🟡 Unsure"}
+                    saved_label = label_map.get(saved["rating"], saved["rating"])
                     msg = f"Saved: **{saved_label}**"
                     if saved["comment"]:
                         msg += f' — *"{saved["comment"]}"*'
@@ -159,7 +175,7 @@ with col2:
                 else:
                     rating = st.radio(
                         "Rate LLM decision:",
-                        ["agree", "disagree"],
+                        ["agree", "disagree", "unsure"],
                         key=f"rating_{qid}",
                         horizontal=True,
                     )

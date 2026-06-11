@@ -42,14 +42,18 @@ SLECHTE ANTWOORDEN:
 Antwoord ALTIJD in dit formaat (max 1 zin reden):
 goed: <korte reden>
 of
-slecht: <korte reden>"""
+slecht: <korte reden>
+of
+onzeker: <korte reden>
+
+Gebruik onzeker alleen als het antwoord echt niet te beoordelen is (bijv. te weinig context, tegenstrijdige signalen)."""
 
 # ── Evaluators ────────────────────────────────────────────────────────────────
 
 class AnswerEvaluator(ABC):
     @abstractmethod
-    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
-        """Return (is_good, reason)."""
+    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
+        """Return (verdict, reason) where verdict is 'good', 'bad', or 'unsure'."""
         pass
 
 
@@ -61,7 +65,7 @@ class GroqEvaluator(AnswerEvaluator):
         self.client = Groq(api_key=api_key)
         self.model = model
 
-    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
+    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -84,15 +88,15 @@ class HuggingFaceEvaluator(AnswerEvaluator):
         self.client = InferenceClient(token=hf_token)
         self.model = "joeddav/xlm-roberta-large-xnli"
 
-    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
+    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
         text = f"Vraag: {question}\nAntwoord: {answer}"
         result = self.client.zero_shot_classification(
             text=text,
             candidate_labels=["passend antwoord", "onvoldoende antwoord"],
             model=self.model,
         )
-        is_good = result[0].label == "passend antwoord"
-        return is_good, ""
+        verdict = "good" if result[0].label == "passend antwoord" else "bad"
+        return verdict, ""
 
 
 class OpenAIEvaluator(AnswerEvaluator):
@@ -106,7 +110,7 @@ class OpenAIEvaluator(AnswerEvaluator):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
 
-    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
+    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -119,12 +123,17 @@ class OpenAIEvaluator(AnswerEvaluator):
         return _parse_verdict(response.choices[0].message.content)
 
 
-def _parse_verdict(raw: str) -> tuple[bool, str]:
-    """Parse 'goed: reason' or 'slecht: reason' from LLM output."""
+def _parse_verdict(raw: str) -> tuple[str, str]:
+    """Parse 'goed:', 'slecht:', or 'onzeker:' from LLM output."""
     text = raw.strip().lower()
-    is_good = text.startswith("goed")
+    if text.startswith("goed"):
+        verdict = "good"
+    elif text.startswith("onzeker"):
+        verdict = "unsure"
+    else:
+        verdict = "bad"
     reason = raw.strip().split(":", 1)[1].strip() if ":" in raw else raw.strip()
-    return is_good, reason
+    return verdict, reason
 
 
 # ── Per-question evaluation ───────────────────────────────────────────────────
@@ -166,8 +175,8 @@ def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
         else:
             question = row["description"]
 
-        is_good, reason = evaluator.evaluate_text(question, str(text))
-        return ("good" if is_good else "bad"), reason
+        verdict, reason = evaluator.evaluate_text(question, str(text))
+        return verdict, reason
 
     return ("good", "")
 
@@ -215,6 +224,7 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
     structured_rows = rows[rows["question_type_label"] != "Tekst"]
 
     text_good   = (text_rows["verdict"] == "good").sum()
+    text_unsure = (text_rows["verdict"] == "unsure").sum()
     text_total  = len(text_rows)
     text_pct    = text_good / text_total if text_total > 0 else 1.0
 
@@ -229,7 +239,9 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
         "total_questions": len(rows),
         "good":           int((rows["verdict"] == "good").sum()),
         "bad":            int((rows["verdict"] == "bad").sum()),
+        "unsure":         int((rows["verdict"] == "unsure").sum()),
         "text_good":      int(text_good),
+        "text_unsure":    int(text_unsure),
         "text_total":     int(text_total),
         "text_pct":       round(text_pct * 100, 1),
         "struct_good":    int(struct_good),
