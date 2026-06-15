@@ -41,7 +41,7 @@ def get_photo_data():
 def get_evaluator():
     api_key  = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
     base_url = st.secrets.get("UVA_API_BASE")   or os.environ.get("UVA_API_BASE") or None
-    return OpenAIEvaluator(api_key=api_key, base_url=base_url, model="gpt-4o")
+    return OpenAIEvaluator(api_key=api_key, base_url=base_url, model="gpt-4o-mini")
 
 @st.cache_resource
 def get_supabase():

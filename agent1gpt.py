@@ -136,6 +136,8 @@ FOLLOW_UP_LABELS = {
     "licht je score toe",
     "licht je antwoord toe",
 }
+# Questions asking for a factual value — any non-empty answer is always good
+FACTUAL_KEYWORDS = {"adres", "naam", "bedrag", "uitgegeven", "medewerker"}
 
 
 def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
@@ -154,6 +156,10 @@ def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
     if q_type == "Tekst":
         if not has_text:
             return ("bad", "Geen antwoord gegeven")
+
+        desc_lower = str(row["description"]).lower()
+        if any(kw in desc_lower for kw in FACTUAL_KEYWORDS):
+            return ("good", "")
 
         label = str(row["description"]).strip().lower().rstrip(".")
         if label in FOLLOW_UP_LABELS and parent_question:
@@ -229,7 +235,9 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
         "total_questions": len(rows),
         "good":           int((rows["verdict"] == "good").sum()),
         "bad":            int((rows["verdict"] == "bad").sum()),
+        "unsure":         0,
         "text_good":      int(text_good),
+        "text_unsure":    0,
         "text_total":     int(text_total),
         "text_pct":       round(text_pct * 100, 1),
         "struct_good":    int(struct_good),
