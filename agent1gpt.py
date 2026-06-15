@@ -42,18 +42,14 @@ SLECHTE ANTWOORDEN:
 Antwoord ALTIJD in dit formaat (max 1 zin reden):
 goed: <korte reden>
 of
-slecht: <korte reden>
-of
-onzeker: <korte reden>
-
-Gebruik onzeker alleen als het antwoord echt niet te beoordelen is (bijv. te weinig context, tegenstrijdige signalen)."""
+slecht: <korte reden>"""
 
 # ── Evaluators ────────────────────────────────────────────────────────────────
 
 class AnswerEvaluator(ABC):
     @abstractmethod
-    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
-        """Return (verdict, reason) where verdict is 'good', 'bad', or 'unsure'."""
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
+        """Return (is_good, reason)."""
         pass
 
 
@@ -65,7 +61,7 @@ class GroqEvaluator(AnswerEvaluator):
         self.client = Groq(api_key=api_key)
         self.model = model
 
-    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -88,15 +84,15 @@ class HuggingFaceEvaluator(AnswerEvaluator):
         self.client = InferenceClient(token=hf_token)
         self.model = "joeddav/xlm-roberta-large-xnli"
 
-    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
         text = f"Vraag: {question}\nAntwoord: {answer}"
         result = self.client.zero_shot_classification(
             text=text,
             candidate_labels=["passend antwoord", "onvoldoende antwoord"],
             model=self.model,
         )
-        verdict = "good" if result[0].label == "passend antwoord" else "bad"
-        return verdict, ""
+        is_good = result[0].label == "passend antwoord"
+        return is_good, ""
 
 
 class OpenAIEvaluator(AnswerEvaluator):
@@ -110,7 +106,7 @@ class OpenAIEvaluator(AnswerEvaluator):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
 
-    def evaluate_text(self, question: str, answer: str) -> tuple[str, str]:
+    def evaluate_text(self, question: str, answer: str) -> tuple[bool, str]:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -123,17 +119,12 @@ class OpenAIEvaluator(AnswerEvaluator):
         return _parse_verdict(response.choices[0].message.content)
 
 
-def _parse_verdict(raw: str) -> tuple[str, str]:
-    """Parse 'goed:', 'slecht:', or 'onzeker:' from LLM output."""
+def _parse_verdict(raw: str) -> tuple[bool, str]:
+    """Parse 'goed: reason' or 'slecht: reason' from LLM output."""
     text = raw.strip().lower()
-    if text.startswith("goed"):
-        verdict = "good"
-    elif text.startswith("onzeker"):
-        verdict = "unsure"
-    else:
-        verdict = "bad"
+    is_good = text.startswith("goed")
     reason = raw.strip().split(":", 1)[1].strip() if ":" in raw else raw.strip()
-    return verdict, reason
+    return is_good, reason
 
 
 # ── Per-question evaluation ───────────────────────────────────────────────────
@@ -145,8 +136,6 @@ FOLLOW_UP_LABELS = {
     "licht je score toe",
     "licht je antwoord toe",
 }
-# Questions asking for a factual value — any non-empty answer is always good
-FACTUAL_KEYWORDS = {"adres", "naam", "bedrag", "uitgegeven", "medewerker"}
 
 
 def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
@@ -166,10 +155,6 @@ def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
         if not has_text:
             return ("bad", "Geen antwoord gegeven")
 
-        desc_lower = str(row["description"]).lower()
-        if any(kw in desc_lower for kw in FACTUAL_KEYWORDS):
-            return ("good", "")
-
         label = str(row["description"]).strip().lower().rstrip(".")
         if label in FOLLOW_UP_LABELS and parent_question:
             # Include previous question + its answer as full context
@@ -181,8 +166,8 @@ def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
         else:
             question = row["description"]
 
-        verdict, reason = evaluator.evaluate_text(question, str(text))
-        return verdict, reason
+        is_good, reason = evaluator.evaluate_text(question, str(text))
+        return ("good" if is_good else "bad"), reason
 
     return ("good", "")
 
@@ -230,7 +215,6 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
     structured_rows = rows[rows["question_type_label"] != "Tekst"]
 
     text_good   = (text_rows["verdict"] == "good").sum()
-    text_unsure = (text_rows["verdict"] == "unsure").sum()
     text_total  = len(text_rows)
     text_pct    = text_good / text_total if text_total > 0 else 1.0
 
@@ -245,9 +229,7 @@ def evaluate_visit(visit_id: int, df: pd.DataFrame, evaluator: AnswerEvaluator) 
         "total_questions": len(rows),
         "good":           int((rows["verdict"] == "good").sum()),
         "bad":            int((rows["verdict"] == "bad").sum()),
-        "unsure":         int((rows["verdict"] == "unsure").sum()),
         "text_good":      int(text_good),
-        "text_unsure":    int(text_unsure),
         "text_total":     int(text_total),
         "text_pct":       round(text_pct * 100, 1),
         "struct_good":    int(struct_good),
@@ -367,7 +349,8 @@ if __name__ == "__main__":
     visits = pd.read_csv("visit_rows.csv")
 
     # ── Choose your evaluator ──────────────────────────────────────────────────
-    # Active: GPT-4o via OpenAI-compatible endpoint. Same LLM as the ReAct
+    # Active: gpt-4o-mini via OpenAI-compatible endpoint (cheap dev default;
+    # switch to "gpt-4o" for the final paper numbers). Same LLM as the ReAct
     # version (Agent_ReAct.py) so the comparison isolates the agent paradigm.
     # Reads OPENAI_API_KEY (required) and UVA_API_BASE (optional — set when
     # using a UvA workspace key against the LiteLLM proxy; leave unset to
@@ -379,7 +362,7 @@ if __name__ == "__main__":
     evaluator = OpenAIEvaluator(
         api_key=os.environ["OPENAI_API_KEY"],
         base_url=os.environ.get("UVA_API_BASE") or None,
-        model="gpt-4o",
+        model="gpt-4o-mini",
     )
 
     VISIT_ID = 43
