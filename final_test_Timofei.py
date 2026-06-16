@@ -1,25 +1,19 @@
 """
 final_test_Timofei.py — Final benchmark on the fixed 111-row test set.
 
-Runs four evaluator configurations on the SAME deterministic split (seed=42):
-  1. Agent1 + GPT   — system prompt only, OpenAI model
-  2. RAG   + GPT   — 10 retrieved examples, OpenAI model
-  3. Agent1 + Groq  — system prompt only, Groq model
-  4. RAG   + Groq  — 10 retrieved examples, Groq model
+Compares Agent1 vs RAG using either GPT or Groq (set MODE below).
 
-Train/test split is FIXED at 111/111 (seed=42). Everyone who runs this file
-evaluates on the same 111 test rows so results are directly comparable.
+Train/test split is generated ONCE and saved to final_split.json.
+Every teammate loads from that same file so everyone tests on identical rows.
 
-Results are saved to results_<YOUR_NAME>.json.
-LLM calls are cached to cache_final_<YOUR_NAME>.json so re-runs are free.
+HOW TO USE
+──────────
+1. Set YOUR_NAME, MODE, and the matching model variable below.
+2. Run:  python3 final_test_Timofei.py
+3. Share your results_<YOUR_NAME>.json for cross-person comparison.
 
-HOW OTHERS CAN USE THIS
-───────────────────────
-Change YOUR_NAME, OPENAI_MODEL, and/or GROQ_MODEL below, then run:
-    python3 final_test_Timofei.py
-
-If you only have one API key set, the other evaluator pair is skipped
-automatically. Share your results_<name>.json for cross-person comparison.
+final_split.json is created on the first run and committed to git —
+teammates do NOT need to regenerate it; they just load it.
 """
 
 from __future__ import annotations
@@ -33,19 +27,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CONFIGURE YOUR RUN — change these variables, then run the script
+#  CONFIGURE YOUR RUN
 # ══════════════════════════════════════════════════════════════════════════════
 YOUR_NAME    = "Timofei"               # results saved to results_<YOUR_NAME>.json
-OPENAI_MODEL = "gpt-4o-mini"           # e.g. "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"
-GROQ_MODEL   = "llama-3.1-8b-instant"  # e.g. "llama-3.3-70b-versatile", "mixtral-8x7b-32768"
+
+MODE         = "gpt"                   # "gpt"  → tests Agent1+GPT and RAG+GPT
+                                       # "groq" → tests Agent1+Groq and RAG+Groq
+
+OPENAI_MODEL = "gpt-4o-mini"           # only used when MODE = "gpt"
+GROQ_MODEL   = "llama-3.1-8b-instant"  # only used when MODE = "groq"
+
 K_EXAMPLES   = 10                      # RAG: retrieved few-shot examples per query
 GROQ_DELAY   = 3.0                     # seconds between Groq calls (rate-limit guard)
 #              ↑ increase to 5–6 if you hit Groq 429 errors
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Fixed split — do NOT change; all team members must use these values
-TRAIN_SEED = 42
-N_TRAIN    = 111
+# Split config — do NOT change; must be identical for all team members
+TRAIN_SEED  = 42
+SPLIT_FILE  = "final_split.json"   # generated once, committed to git
 
 from agent1gpt import (
     AnswerEvaluator, OpenAIEvaluator, GroqEvaluator, _parse_verdict,
@@ -53,18 +52,14 @@ from agent1gpt import (
 from raggpt import (
     RAGIndex, RAGEvaluator,
     _build_augmented_system, _build_question_text,
-    load_reviews, split_train_test,
+    load_reviews,
 )
 
 
 # ── Groq RAG Evaluator ───────────────────────────────────────────────────────
-# raggpt.RAGEvaluator is GPT-only; this wraps the same RAG logic for Groq.
 
 class GroqRAGEvaluator(AnswerEvaluator):
-    """RAG-augmented evaluator using Groq instead of OpenAI.
-    Retrieves few-shots from the same TF-IDF index and uses the same
-    Dutch-labelled few-shot format as RAGEvaluator for consistency.
-    """
+    """RAG-augmented evaluator using Groq instead of OpenAI."""
 
     def __init__(self, groq_api_key: str, index: RAGIndex,
                  model: str = GROQ_MODEL, k: int = K_EXAMPLES):
@@ -89,6 +84,45 @@ class GroqRAGEvaluator(AnswerEvaluator):
         return _parse_verdict(resp.choices[0].message.content)
 
 
+# ── Split: generate once, always load from disk ───────────────────────────────
+
+def get_split() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (train_df, test_df). Generates final_split.json on first call."""
+    print("Loading llm_reviews from Supabase ...")
+    df = load_reviews()
+
+    if os.path.exists(SPLIT_FILE):
+        split = json.load(open(SPLIT_FILE))
+        train_ids = set(split["train_ids"])
+        test_ids  = set(split["test_ids"])
+        train_df = df[df["id"].isin(train_ids)].reset_index(drop=True)
+        test_df  = df[df["id"].isin(test_ids)].reset_index(drop=True)
+        print(f"Loaded split from {SPLIT_FILE}  "
+              f"(train={len(train_df)}  test={len(test_df)})")
+    else:
+        from sklearn.model_selection import train_test_split as skl_split
+        train_df, test_df = skl_split(
+            df, test_size=0.5, random_state=TRAIN_SEED,
+            stratify=df["nigel_rating"],
+        )
+        train_df = train_df.reset_index(drop=True)
+        test_df  = test_df.reset_index(drop=True)
+
+        # Verify stratification
+        for label, part in [("train", train_df), ("test", test_df)]:
+            counts = part["nigel_rating"].value_counts().to_dict()
+            print(f"  {label}: {len(part)} rows  {counts}")
+
+        json.dump(
+            {"train_ids": train_df["id"].tolist(), "test_ids": test_df["id"].tolist()},
+            open(SPLIT_FILE, "w"), indent=2,
+        )
+        print(f"Generated and saved split → {SPLIT_FILE}")
+        print(f"  → Commit {SPLIT_FILE} to git so teammates use the same rows.")
+
+    return train_df, test_df
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _eval_row(row: pd.Series, evaluator: AnswerEvaluator) -> str:
@@ -110,8 +144,7 @@ def _run(
         rid, tv = str(row["id"]), row["true_verdict"]
         ck = f"{label}_{rid}"
         if ck in cache:
-            pred = cache[ck]
-            src  = "cache"
+            pred, src = cache[ck], "cache"
         else:
             try:
                 pred = _eval_row(row, evaluator)
@@ -156,83 +189,86 @@ def _metrics(results: list[dict], label: str) -> dict:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    groq_key   = os.environ.get("GROQ_API_KEY")
-    base_url   = os.environ.get("UVA_API_BASE") or None
+    if MODE not in ("gpt", "groq"):
+        raise ValueError(f"MODE must be 'gpt' or 'groq', got {MODE!r}")
 
-    cache_file = f"cache_final_{YOUR_NAME}.json"
+    base_url = os.environ.get("UVA_API_BASE") or None
+    cache_file = f"cache_final_{YOUR_NAME}_{MODE}.json"
     cache: dict = json.load(open(cache_file)) if os.path.exists(cache_file) else {}
 
     print("=" * 62)
-    print(f"  FINAL TEST — {YOUR_NAME}")
-    print(f"  OpenAI : {OPENAI_MODEL if openai_key else 'SKIPPED (no OPENAI_API_KEY)'}")
-    print(f"  Groq   : {GROQ_MODEL   if groq_key   else 'SKIPPED (no GROQ_API_KEY)'}")
-    print(f"  K      : {K_EXAMPLES}  |  train_seed={TRAIN_SEED}  n_train={N_TRAIN}  (fixed)")
+    print(f"  FINAL TEST — {YOUR_NAME}  |  MODE = {MODE}")
+    if MODE == "gpt":
+        print(f"  Model : {OPENAI_MODEL}")
+    else:
+        print(f"  Model : {GROQ_MODEL}  (delay={GROQ_DELAY}s)")
+    print(f"  K     : {K_EXAMPLES}  |  split file : {SPLIT_FILE}")
     print("=" * 62)
 
-    print("\nLoading llm_reviews from Supabase ...")
-    df = load_reviews()
-    train_df, test_df = split_train_test(df, n_train=N_TRAIN, seed=TRAIN_SEED)
+    train_df, test_df = get_split()
 
     n_good = (test_df["true_verdict"] == "good").sum()
     n_bad  = (test_df["true_verdict"] == "bad").sum()
-    print(f"Train : {len(train_df)} rows")
-    print(f"Test  : {len(test_df)} rows  (good={n_good}  bad={n_bad})")
+    print(f"Test : {len(test_df)} rows  (good={n_good}  bad={n_bad})")
     print("=" * 62)
 
-    print("\nBuilding TF-IDF index ...")
+    print("\nBuilding TF-IDF index over train set ...")
     index = RAGIndex(train_df)
 
     collected: list[tuple[dict, list[dict]]] = []
 
-    # ── GPT runs ──────────────────────────────────────────────────────────────
-    if openai_key:
+    if MODE == "gpt":
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_key:
+            raise RuntimeError("OPENAI_API_KEY not set in environment.")
+
         lbl_a1  = f"Agent1+{OPENAI_MODEL}"
         lbl_rag = f"RAG+{OPENAI_MODEL}(k={K_EXAMPLES})"
 
-        a1_gpt  = OpenAIEvaluator(api_key=openai_key, base_url=base_url, model=OPENAI_MODEL)
-        rag_gpt = RAGEvaluator(index=index, k=K_EXAMPLES,
-                               api_key=openai_key, base_url=base_url, model=OPENAI_MODEL)
+        a1  = OpenAIEvaluator(api_key=openai_key, base_url=base_url, model=OPENAI_MODEL)
+        rag = RAGEvaluator(index=index, k=K_EXAMPLES,
+                           api_key=openai_key, base_url=base_url, model=OPENAI_MODEL)
 
         print(f"\n▶ {lbl_a1}  ({len(test_df)} rows)\n")
-        r_a1_gpt = _run(test_df, a1_gpt, lbl_a1, cache, delay=0.25)
+        r_a1 = _run(test_df, a1, lbl_a1, cache, delay=0.25)
 
         print(f"\n▶ {lbl_rag}  ({len(test_df)} rows)\n")
-        r_rag_gpt = _run(test_df, rag_gpt, lbl_rag, cache, delay=0.25)
+        r_rag = _run(test_df, rag, lbl_rag, cache, delay=0.25)
 
-        collected.append((_metrics(r_a1_gpt,  lbl_a1),  r_a1_gpt))
-        collected.append((_metrics(r_rag_gpt, lbl_rag), r_rag_gpt))
-    else:
-        print("\n  [SKIP] GPT — OPENAI_API_KEY not set")
+        collected.append((_metrics(r_a1,  lbl_a1),  r_a1))
+        collected.append((_metrics(r_rag, lbl_rag), r_rag))
 
-    # ── Groq runs ─────────────────────────────────────────────────────────────
-    if groq_key:
-        lbl_ag = f"Agent1+{GROQ_MODEL}"
-        lbl_rg = f"RAG+{GROQ_MODEL}(k={K_EXAMPLES})"
+    else:  # groq
+        groq_key = os.environ.get("GROQ_API_KEY")
+        if not groq_key:
+            raise RuntimeError("GROQ_API_KEY not set in environment.")
 
-        a1_groq  = GroqEvaluator(api_key=groq_key, model=GROQ_MODEL)
-        rag_groq = GroqRAGEvaluator(groq_api_key=groq_key, index=index,
-                                     model=GROQ_MODEL, k=K_EXAMPLES)
+        lbl_a1  = f"Agent1+{GROQ_MODEL}"
+        lbl_rag = f"RAG+{GROQ_MODEL}(k={K_EXAMPLES})"
 
-        print(f"\n▶ {lbl_ag}  ({len(test_df)} rows, delay={GROQ_DELAY}s)\n")
-        r_a1_groq = _run(test_df, a1_groq, lbl_ag, cache, delay=GROQ_DELAY)
+        a1  = GroqEvaluator(api_key=groq_key, model=GROQ_MODEL)
+        rag = GroqRAGEvaluator(groq_api_key=groq_key, index=index,
+                               model=GROQ_MODEL, k=K_EXAMPLES)
 
-        print(f"\n▶ {lbl_rg}  ({len(test_df)} rows, delay={GROQ_DELAY}s)\n")
-        r_rag_groq = _run(test_df, rag_groq, lbl_rg, cache, delay=GROQ_DELAY)
+        print(f"\n▶ {lbl_a1}  ({len(test_df)} rows, delay={GROQ_DELAY}s)\n")
+        r_a1 = _run(test_df, a1, lbl_a1, cache, delay=GROQ_DELAY)
 
-        collected.append((_metrics(r_a1_groq,  lbl_ag), r_a1_groq))
-        collected.append((_metrics(r_rag_groq, lbl_rg), r_rag_groq))
-    else:
-        print("\n  [SKIP] Groq — GROQ_API_KEY not set")
+        print(f"\n▶ {lbl_rag}  ({len(test_df)} rows, delay={GROQ_DELAY}s)\n")
+        r_rag = _run(test_df, rag, lbl_rag, cache, delay=GROQ_DELAY)
 
-    if not collected:
-        print("\n  No evaluators ran — set OPENAI_API_KEY or GROQ_API_KEY.")
-        return
+        collected.append((_metrics(r_a1,  lbl_a1),  r_a1))
+        collected.append((_metrics(r_rag, lbl_rag), r_rag))
 
-    # ── Summary table ─────────────────────────────────────────────────────────
+    # ── Summary ───────────────────────────────────────────────────────────────
+    (m1, r1), (m2, r2) = collected
+    d_acc = (m2["accuracy"] - m1["accuracy"]) * 100
+    d_f1  = (m2["f1"]       - m1["f1"])       * 100
+    fixed = sum(1 for a, b in zip(r1, r2) if not a["correct"] and b["correct"])
+    broke = sum(1 for a, b in zip(r1, r2) if     a["correct"] and not b["correct"])
+
     W = 48
     print(f"\n{'='*62}")
-    print(f"  FINAL SUMMARY — {YOUR_NAME}")
+    print(f"  SUMMARY — {YOUR_NAME}  ({MODE.upper()})")
     print(f"{'='*62}")
     print(f"  {'Evaluator':<{W}} {'Acc':>5}  {'F1':>5}  {'Prec':>5}  {'Rec':>5}")
     print(f"  {'─'*W}  {'─'*5}  {'─'*5}  {'─'*5}  {'─'*5}")
@@ -241,51 +277,32 @@ def main() -> None:
             f"  {m['label']:<{W}} {m['accuracy']*100:>4.1f}%  "
             f"{m['f1']*100:>4.1f}%  {m['precision']*100:>4.1f}%  {m['recall']*100:>4.1f}%"
         )
+    print(f"{'─'*62}")
+    print(f"  RAG vs Agent1:  Δacc={d_acc:+.1f}%  Δf1={d_f1:+.1f}%  "
+          f"fixed={fixed}  broke={broke}")
     print(f"{'='*62}")
 
-    # Delta rows: Agent1 vs RAG for each model family
-    pairs: list[tuple[tuple, tuple, str]] = []
-    if openai_key and len(collected) >= 2:
-        pairs.append((collected[0], collected[1], OPENAI_MODEL))
-    if groq_key:
-        off = 2 if openai_key else 0
-        if len(collected) >= off + 2:
-            pairs.append((collected[off], collected[off + 1], GROQ_MODEL))
-
-    if pairs:
-        print()
-    for (m1, r1), (m2, r2), family in pairs:
-        d_acc = (m2["accuracy"] - m1["accuracy"]) * 100
-        d_f1  = (m2["f1"]       - m1["f1"])       * 100
-        fixed = sum(1 for a, b in zip(r1, r2) if not a["correct"] and b["correct"])
-        broke = sum(1 for a, b in zip(r1, r2) if     a["correct"] and not b["correct"])
-        print(
-            f"  {family}:  RAG vs Agent1  "
-            f"Δacc={d_acc:+.1f}%  Δf1={d_f1:+.1f}%  "
-            f"fixed={fixed}  broke={broke}"
-        )
-
-    # ── Persist cache and results ──────────────────────────────────────────────
+    # ── Persist ───────────────────────────────────────────────────────────────
     json.dump(cache, open(cache_file, "w"), indent=2)
 
     output = {
-        "name":         YOUR_NAME,
-        "date":         datetime.now().isoformat(),
-        "openai_model": OPENAI_MODEL,
-        "groq_model":   GROQ_MODEL,
-        "k_examples":   K_EXAMPLES,
-        "train_seed":   TRAIN_SEED,
-        "n_test":       len(test_df),
+        "name":  YOUR_NAME,
+        "mode":  MODE,
+        "date":  datetime.now().isoformat(),
+        "model": OPENAI_MODEL if MODE == "gpt" else GROQ_MODEL,
+        "k_examples":  K_EXAMPLES,
+        "split_file":  SPLIT_FILE,
+        "n_test":      len(test_df),
         "evaluators": {
             m["label"]: {"metrics": m, "rows": r}
             for m, r in collected
         },
     }
-    results_file = f"results_{YOUR_NAME}.json"
+    results_file = f"results_{YOUR_NAME}_{MODE}.json"
     json.dump(output, open(results_file, "w"), indent=2)
 
-    print(f"\n  Saved → {results_file}  (share this for cross-person comparison)")
-    print(f"  Cache → {cache_file}  (re-running is free)")
+    print(f"\n  Saved → {results_file}")
+    print(f"  Cache → {cache_file}")
 
 
 if __name__ == "__main__":
