@@ -1,19 +1,11 @@
 """
-final_test_Timofei.py — Final benchmark on the fixed 111-row test set.
+final_test_Timofei.py — Timofei's final benchmark (Agent1 vs RAG).
 
-Compares Agent1 vs RAG using either GPT or Groq (set MODE below).
+Set MODE = "gpt" or "groq" below and run:
+    python3 final_test_Timofei.py
 
-Train/test split is generated ONCE and saved to final_split.json.
-Every teammate loads from that same file so everyone tests on identical rows.
-
-HOW TO USE
-──────────
-1. Set YOUR_NAME, MODE, and the matching model variable below.
-2. Run:  python3 final_test_Timofei.py
-3. Share your results_<YOUR_NAME>.json for cross-person comparison.
-
-final_split.json is created on the first run and committed to git —
-teammates do NOT need to regenerate it; they just load it.
+Train/test split is loaded from final_split.json (committed to git).
+Results → results_Timofei_<mode>.json
 """
 
 from __future__ import annotations
@@ -29,8 +21,6 @@ load_dotenv()
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONFIGURE YOUR RUN
 # ══════════════════════════════════════════════════════════════════════════════
-YOUR_NAME    = "Timofei"               # results saved to results_<YOUR_NAME>.json
-
 MODE         = "gpt"                   # "gpt"  → tests Agent1+GPT and RAG+GPT
                                        # "groq" → tests Agent1+Groq and RAG+Groq
 
@@ -193,11 +183,11 @@ def main() -> None:
         raise ValueError(f"MODE must be 'gpt' or 'groq', got {MODE!r}")
 
     base_url = os.environ.get("UVA_API_BASE") or None
-    cache_file = f"cache_final_{YOUR_NAME}_{MODE}.json"
+    cache_file = f"cache_final_Timofei_{MODE}.json"
     cache: dict = json.load(open(cache_file)) if os.path.exists(cache_file) else {}
 
     print("=" * 62)
-    print(f"  FINAL TEST — {YOUR_NAME}  |  MODE = {MODE}")
+    print(f"  FINAL TEST — Timofei  |  MODE = {MODE}")
     if MODE == "gpt":
         print(f"  Model : {OPENAI_MODEL}")
     else:
@@ -268,7 +258,7 @@ def main() -> None:
 
     W = 48
     print(f"\n{'='*62}")
-    print(f"  SUMMARY — {YOUR_NAME}  ({MODE.upper()})")
+    print(f"  SUMMARY — Timofei  ({MODE.upper()})")
     print(f"{'='*62}")
     print(f"  {'Evaluator':<{W}} {'Acc':>5}  {'F1':>5}  {'Prec':>5}  {'Rec':>5}")
     print(f"  {'─'*W}  {'─'*5}  {'─'*5}  {'─'*5}  {'─'*5}")
@@ -286,7 +276,7 @@ def main() -> None:
     json.dump(cache, open(cache_file, "w"), indent=2)
 
     output = {
-        "name":  YOUR_NAME,
+        "name":  "Timofei",
         "mode":  MODE,
         "date":  datetime.now().isoformat(),
         "model": OPENAI_MODEL if MODE == "gpt" else GROQ_MODEL,
@@ -298,7 +288,7 @@ def main() -> None:
             for m, r in collected
         },
     }
-    results_file = f"results_{YOUR_NAME}_{MODE}.json"
+    results_file = f"results_Timofei_{MODE}.json"
     json.dump(output, open(results_file, "w"), indent=2)
 
     print(f"\n  Saved → {results_file}")
