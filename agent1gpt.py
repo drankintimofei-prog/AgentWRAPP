@@ -137,7 +137,7 @@ FOLLOW_UP_LABELS = {
     "licht je antwoord toe",
 }
 # Questions asking for a factual value — any non-empty answer is always good
-FACTUAL_KEYWORDS = {"adres", "naam", "bedrag", "uitgegeven", "medewerker"}
+FACTUAL_KEYWORDS = {"adres"}
 
 
 def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,

@@ -136,7 +136,7 @@ FOLLOW_UP_LABELS = {
     "licht je score toe",
     "licht je antwoord toe",
 }
-FACTUAL_KEYWORDS = {"adres", "naam", "bedrag", "uitgegeven", "medewerker"}
+FACTUAL_KEYWORDS = {"adres"}
 
 
 def evaluate_answer(row: pd.Series, evaluator: AnswerEvaluator,
