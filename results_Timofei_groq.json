@@ -1,0 +1,35 @@
+{
+  "name": "Timofei",
+  "date": "2026-06-17T02:33:32.660331",
+  "k_examples": 5,
+  "evaluators": {
+    "Agent1+llama-3.1-8b-instant": {
+      "metrics": {
+        "label": "Agent1+llama-3.1-8b-instant",
+        "accuracy": 0.7664670658682635,
+        "precision": 0.7819548872180451,
+        "recall": 0.9122807017543859,
+        "f1": 0.8421052631578947,
+        "tp": 104,
+        "tn": 24,
+        "fp": 29,
+        "fn": 10,
+        "n": 167
+      }
+    },
+    "RAG+llama-3.1-8b-instant(k=5)": {
+      "metrics": {
+        "label": "RAG+llama-3.1-8b-instant(k=5)",
+        "accuracy": 0.6526946107784432,
+        "precision": 0.8181818181818182,
+        "recall": 0.631578947368421,
+        "f1": 0.712871287128713,
+        "tp": 72,
+        "tn": 37,
+        "fp": 16,
+        "fn": 42,
+        "n": 167
+      }
+    }
+  }
+}
