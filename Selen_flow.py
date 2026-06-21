@@ -1,14 +1,16 @@
 """
-Selen_flow.py — Prosecutor multi-agent flow on the fixed final_split.json test set.
+Selen_flow.py — Multi-agent flow (Agent 1 + Agent 2) on the fixed final_split.json test set.
 
-Agent 1 results are loaded from cache_selen.json (already computed — no re-runs).
-Agent 2 (Prosecutor) receives Agent 1's full reasoning and acts as a strict critic:
-  - Skeptical of "goed" verdicts, looks for missing detail or vagueness
-  - Confirms "slecht" verdicts unless the answer clearly meets all requirements
-  - Final verdict is Agent 2's decision
+Set MODE at the top to choose which Agent 2 personality runs:
+  "prosecutor" — critical, skeptical; only overrides to "goed" when clearly justified
+  "reviewer"   — lenient, checks reasoning; tends to confirm or soften "slecht" verdicts
 
-Saves to selen_prosecutor.json.
-Resume-safe: prosecutor results cached under "pros_*" keys in cache_selen.json.
+Agent 1 results are always loaded from cache_selen.json (no re-runs).
+Agent 2 results are cached under "{mode}_*" keys in cache_selen.json.
+
+Output files:
+  prosecutor → selen_prosecutor.json
+  reviewer   → multi_agent_Selen.json
 
 Usage:
     python3 Selen_flow.py
@@ -23,10 +25,27 @@ from dotenv import load_dotenv
 
 load_dotenv("/Users/timofeidrankin/Desktop/project_Agent/.env")
 
-MODEL        = "gpt-4o-mini"
-CACHE_FILE   = "cache_selen.json"
-SPLIT_FILE   = "final_split.json"
-RESULTS_PROS = "selen_prosecutor.json"
+# ── Mode switch ───────────────────────────────────────────────────────────────
+# Change this to "reviewer" or "prosecutor"
+MODE = "prosecutor"
+
+MODEL      = "gpt-4o-mini"
+CACHE_FILE = "cache_selen.json"
+SPLIT_FILE = "final_split.json"
+
+_RESULTS_FILE = {
+    "prosecutor": "selen_prosecutor.json",
+    "reviewer":   "multi_agent_Selen.json",
+}
+_CACHE_PREFIX = {
+    "prosecutor": "pros",
+    "reviewer":   "ma",
+}
+
+assert MODE in _RESULTS_FILE, f"MODE must be 'prosecutor' or 'reviewer', got {MODE!r}"
+
+RESULTS_FILE = _RESULTS_FILE[MODE]
+CACHE_PREFIX = _CACHE_PREFIX[MODE]
 
 # ── System prompts ────────────────────────────────────────────────────────────
 
@@ -55,6 +74,26 @@ goed: <korte reden>
 of
 slecht: <korte reden>"""
 
+REVIEWER_PROMPT = """Je bent een kwaliteitscontroleur voor WRAPP. Je controleert beoordelingen van mystery shopper antwoorden.
+
+Je taak: Beoordeel of de redenering van Agent 1 klopt.
+
+Je ontvangt de volledige context:
+- De richtlijnen die Agent 1 heeft gebruikt
+- De vraag en het shopper-antwoord
+- De beslissing en redenering van Agent 1
+
+Ga na of de redenering logisch en consistent is met de richtlijnen.
+Bevestig de beslissing als de redenering klopt.
+Corrigeer de beslissing als de redenering onjuist of onvolledig is.
+
+Antwoord ALTIJD in dit formaat (max 1 zin reden):
+goed: <korte reden>
+of
+slecht: <korte reden>"""
+
+AGENT2_PROMPT = PROSECUTOR_PROMPT if MODE == "prosecutor" else REVIEWER_PROMPT
+
 # ── Data ──────────────────────────────────────────────────────────────────────
 
 def load_reviews() -> pd.DataFrame:
@@ -70,7 +109,7 @@ def load_reviews() -> pd.DataFrame:
     return df
 
 def apply_split(df: pd.DataFrame) -> pd.DataFrame:
-    split   = json.load(open(SPLIT_FILE))
+    split = json.load(open(SPLIT_FILE))
     return df[df["id"].isin(split["test_ids"])].reset_index(drop=True)
 
 def _build_question(row: pd.Series) -> str:
@@ -89,7 +128,7 @@ def _build_question(row: pd.Series) -> str:
 def _parse(raw: str) -> str:
     return "good" if raw.strip().lower().startswith("goed") else "bad"
 
-def call_prosecutor(client, question: str, answer: str, a1_raw: str) -> tuple[str, str]:
+def call_agent2(client, question: str, answer: str, a1_raw: str) -> tuple[str, str]:
     """Returns (verdict, raw_response)."""
     user_msg = (
         f"=== BEOORDELINGSRICHTLIJNEN (gebruikt door Agent 1) ===\n"
@@ -103,7 +142,7 @@ def call_prosecutor(client, question: str, answer: str, a1_raw: str) -> tuple[st
     resp = client.chat.completions.create(
         model=MODEL,
         messages=[
-            {"role": "system", "content": PROSECUTOR_PROMPT},
+            {"role": "system", "content": AGENT2_PROMPT},
             {"role": "user",   "content": user_msg},
         ],
         max_tokens=100,
@@ -146,23 +185,24 @@ def main():
         base_url = os.environ.get("UVA_API_BASE") or None,
     )
 
+    print(f"Mode: {MODE.upper()}")
     print("Downloading reviews from Supabase ...")
     df      = load_reviews()
     test_df = apply_split(df)
     print(f"Test: {len(test_df)}")
 
     if not os.path.exists(CACHE_FILE):
-        print(f"ERROR: {CACHE_FILE} not found — run the original Selen_flow.py first to generate Agent 1 results.")
+        print(f"ERROR: {CACHE_FILE} not found — run the original Agent1 flow first.")
         return
 
     cache: dict = json.load(open(CACHE_FILE))
 
-    pros_rows = []
-    skipped   = 0
-    errors    = 0
-    n         = len(test_df)
+    a2_rows = []
+    skipped = 0
+    errors  = 0
+    n       = len(test_df)
 
-    print(f"\nRunning Prosecutor on {n} test rows (Agent 1 loaded from cache) ...\n")
+    print(f"\nRunning {MODE.capitalize()} on {n} test rows (Agent 1 from cache) ...\n")
 
     for i, (_, row) in enumerate(test_df.iterrows(), 1):
         row_id   = int(row["id"])
@@ -170,7 +210,7 @@ def main():
         answer   = str(row["shopper_answer"])
         true_v   = row["true_verdict"]
 
-        # Load Agent 1 from cache — skip row if missing
+        # Load Agent 1 from cache — skip if missing
         key_a1 = f"a1_{row_id}"
         if key_a1 not in cache:
             print(f"  [!] Agent1 cache missing for row {row_id} — skipping")
@@ -179,57 +219,59 @@ def main():
         pred_a1 = cache[key_a1]["verdict"]
         a1_raw  = cache[key_a1]["raw"]
 
-        # ── Prosecutor ───────────────────────────────────────────────────────
-        key_pros = f"pros_{row_id}"
-        if key_pros in cache:
-            pred_pros = cache[key_pros]["verdict"]
+        # ── Agent 2 ───────────────────────────────────────────────────────────
+        key_a2 = f"{CACHE_PREFIX}_{row_id}"
+        if key_a2 in cache:
+            pred_a2 = cache[key_a2]["verdict"]
         else:
             try:
-                pred_pros, pros_raw = call_prosecutor(client, question, answer, a1_raw)
-                cache[key_pros] = {"verdict": pred_pros, "raw": pros_raw}
+                pred_a2, a2_raw = call_agent2(client, question, answer, a1_raw)
+                cache[key_a2] = {"verdict": pred_a2, "raw": a2_raw}
                 json.dump(cache, open(CACHE_FILE, "w"))
                 time.sleep(0.5)
             except Exception as e:
-                print(f"  [!] Prosecutor ERROR row {row_id}: {e}")
+                print(f"  [!] {MODE.capitalize()} ERROR row {row_id}: {e}")
                 errors += 1
                 continue
 
-        ia = "+" if pred_a1   == true_v else "x"
-        ip = "+" if pred_pros == true_v else "x"
+        ia = "+" if pred_a1 == true_v else "x"
+        i2 = "+" if pred_a2 == true_v else "x"
+        tag = "pros" if MODE == "prosecutor" else "rev"
         print(f"  {i:>3}/{n}  id={row_id:>3}  true={true_v:<4}  "
-              f"a1={pred_a1:<4}{ia}  pros={pred_pros:<4}{ip}")
+              f"a1={pred_a1:<4}{ia}  {tag}={pred_a2:<4}{i2}")
 
-        pros_rows.append({"id": row_id, "true": true_v,
-                          "predicted": pred_pros, "correct": pred_pros == true_v})
+        a2_rows.append({"id": row_id, "true": true_v,
+                        "predicted": pred_a2, "correct": pred_a2 == true_v})
 
     if skipped:
         print(f"\n  ⚠ {skipped} rows skipped — Agent 1 cache missing")
     if errors:
-        print(f"\n  ⚠ {errors} rows skipped due to API errors — re-run to retry them")
+        print(f"\n  ⚠ {errors} rows skipped due to API errors — re-run to retry")
 
-    if not pros_rows:
+    if not a2_rows:
         print("No results to save.")
         return
 
     print("\n" + "=" * 55)
-    m_pros = compute_metrics(pros_rows, f"Prosecutor+{MODEL}")
+    label  = f"{'Prosecutor' if MODE == 'prosecutor' else 'MultiAgent'}+{MODEL}"
+    m_a2   = compute_metrics(a2_rows, label)
 
     output = {
         "name":       "Timofei",
-        "mode":       "prosecutor-gpt",
+        "mode":       f"{MODE}-gpt",
         "date":       datetime.now().isoformat(),
         "model":      MODEL,
         "split_file": SPLIT_FILE,
-        "n_test":     len(pros_rows),
+        "n_test":     len(a2_rows),
         "skipped":    skipped,
         "errors":     errors,
         "evaluators": {
-            m_pros["label"]: {"metrics": m_pros, "rows": pros_rows},
+            m_a2["label"]: {"metrics": m_a2, "rows": a2_rows},
         },
     }
-    with open(RESULTS_PROS, "w") as f:
+    with open(RESULTS_FILE, "w") as f:
         json.dump(output, f, indent=2)
-    print(f"\nSaved → {RESULTS_PROS}")
+    print(f"\nSaved → {RESULTS_FILE}")
 
 
 if __name__ == "__main__":
