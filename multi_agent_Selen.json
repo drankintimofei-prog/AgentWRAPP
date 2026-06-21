@@ -1,0 +1,1031 @@
+{
+  "name": "Timofei",
+  "mode": "multi-agent-gpt",
+  "date": "2026-06-21T15:22:56.336045",
+  "model": "gpt-4o-mini",
+  "split_file": "final_split.json",
+  "n_test": 167,
+  "errors": 0,
+  "evaluators": {
+    "MultiAgent+gpt-4o-mini": {
+      "metrics": {
+        "label": "MultiAgent+gpt-4o-mini",
+        "accuracy": 0.6826347305389222,
+        "precision": 0.7019867549668874,
+        "recall": 0.9298245614035088,
+        "f1": 0.8,
+        "tp": 106,
+        "tn": 8,
+        "fp": 45,
+        "fn": 8,
+        "n": 167,
+        "bad_recall": 0.1509433962264151,
+        "bad_precision": 0.5
+      },
+      "rows": [
+        {
+          "id": 7,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 8,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 10,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 11,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 25,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 26,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 27,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 28,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 31,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 33,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 34,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 35,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 38,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 41,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 43,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 45,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 48,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 49,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 52,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 55,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 57,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 59,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 60,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 62,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 63,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 66,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 67,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 71,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 73,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 74,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 75,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 76,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 78,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 79,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 80,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 81,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 84,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 86,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 87,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 89,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 90,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 91,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 92,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 93,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 99,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 100,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 101,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 103,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 106,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 108,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 111,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 116,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 117,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 119,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 121,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 122,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 128,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 129,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 130,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 131,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 133,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 135,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 140,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 142,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 145,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 146,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 147,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 149,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 151,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 153,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 154,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 156,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 159,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 161,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 166,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 169,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 173,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 174,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 175,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 176,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 180,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 181,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 183,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 184,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 186,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 187,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 188,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 189,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 191,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 192,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 193,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 194,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 197,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 198,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 207,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 213,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 215,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 216,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 217,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 218,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 219,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 222,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 223,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 226,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 227,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 230,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 232,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 235,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 236,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 238,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 241,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 244,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 245,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 246,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 255,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 257,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 258,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 259,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 261,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 262,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 263,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 268,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 271,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 273,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 274,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 275,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 276,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 278,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 280,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 286,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 287,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 288,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 289,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 293,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 294,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 295,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 296,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 297,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 298,
+          "true": "good",
+          "predicted": "bad",
+          "correct": false
+        },
+        {
+          "id": 299,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 300,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 301,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 302,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 303,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 304,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 305,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 309,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 311,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 314,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 316,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 317,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 319,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 321,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 324,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 326,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 327,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 328,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 330,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 332,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 336,
+          "true": "bad",
+          "predicted": "bad",
+          "correct": true
+        },
+        {
+          "id": 338,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 340,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 346,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 347,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 348,
+          "true": "bad",
+          "predicted": "good",
+          "correct": false
+        },
+        {
+          "id": 350,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        },
+        {
+          "id": 352,
+          "true": "good",
+          "predicted": "good",
+          "correct": true
+        }
+      ]
+    }
+  }
+}
