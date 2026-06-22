@@ -1,5 +1,5 @@
 """
-eval_artifact.py — RAG vs Agent1 evaluation for thesis artifact.
+eval_artifact_Timofei.py — RAG vs Agent1 evaluation for thesis artifact.
 
 Evaluates shopper answers from the llm_reviews Supabase table using:
   - Agent1: single LLM call with the WRAPP evaluation system prompt
@@ -13,7 +13,7 @@ Results are saved to a JSON file and never overwrite existing files.
 The script is resume-safe: interrupting and restarting picks up from the cache.
 
 Usage:
-    python3 eval_artifact.py
+    python3 eval_artifact_Timofei.py
 """
 from __future__ import annotations
 
