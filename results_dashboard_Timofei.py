@@ -135,35 +135,61 @@ def render_model(name, color, a1_k5, a1_k10, rag_k5, rag_k10, p_all, p_bad,
     ])
     st.dataframe(table, use_container_width=True, hide_index=True)
 
-    # Bad Recall bar chart
-    fig = go.Figure()
-    labels = ["Agent1\n(baseline)", "RAG k=5", "RAG k=10"]
-    values = [a1_k10["Bad Recall"], rag_k5["Bad Recall"], rag_k10["Bad Recall"]]
-    r, g, b = _hex_to_rgb(color)
+    # Bar charts — Bad Recall and Bad Precision side by side
+    labels    = ["Agent1 (baseline)", "RAG k=5", "RAG k=10"]
+    rc_values = [a1_k10["Bad Recall"],    rag_k5["Bad Recall"],    rag_k10["Bad Recall"]]
+    pr_values = [a1_k10["Bad Precision"], rag_k5["Bad Precision"], rag_k10["Bad Precision"]]
+    r, g, b   = _hex_to_rgb(color)
     bar_colors = [
-        "#6b7280",                            # Agent1: solid mid-grey (clearly a baseline)
-        f"rgba({r},{g},{b},0.55)",            # RAG k=5: visible tint of model colour
-        color,                                 # RAG k=10: full model colour
+        "#374151",                        # Agent1: dark charcoal, clearly readable
+        f"rgba({r},{g},{b},0.60)",        # RAG k=5: visible tint of model colour
+        color,                             # RAG k=10: full model colour
     ]
-    fig.add_trace(go.Bar(
-        x=labels, y=values,
-        marker_color=bar_colors,
-        marker_line=dict(color="#ffffff", width=1),
-        text=[f"{v}%" for v in values],
-        textposition="outside",
-        textfont=dict(size=14, color="#1e293b"),
-    ))
-    fig.update_layout(
-        title=dict(
-            text="Bad Recall — main metric<br><sup>Fraction of truly bad answers correctly identified as bad</sup>",
-            font=dict(size=14),
-        ),
-        yaxis=dict(range=[0, 105], title="Bad Recall (%)", gridcolor="#e5e7eb"),
-        height=300, margin=dict(t=60, b=10, l=10, r=10),
-        plot_bgcolor="#fafafa", paper_bgcolor="white",
-        xaxis=dict(showgrid=False),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+
+    def make_bar(values, title, subtitle):
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=labels, y=values,
+            marker_color=bar_colors,
+            marker_line=dict(color="#e5e7eb", width=1),
+            text=[f"{v}%" for v in values],
+            textposition="outside",
+            textfont=dict(size=13, color="#111827"),
+        ))
+        fig.update_layout(
+            title=dict(text=f"{title}<br><sup>{subtitle}</sup>", font=dict(size=13)),
+            yaxis=dict(range=[0, 108], title="%", gridcolor="#e5e7eb"),
+            height=300, margin=dict(t=60, b=10, l=10, r=10),
+            plot_bgcolor="#f8fafc", paper_bgcolor="white",
+            xaxis=dict(showgrid=False, tickfont=dict(size=12, color="#111827")),
+        )
+        return fig
+
+    ch1, ch2 = st.columns(2)
+    with ch1:
+        st.plotly_chart(
+            make_bar(rc_values,
+                     "Bad Recall (main metric)",
+                     "How many truly bad answers were caught?"),
+            use_container_width=True,
+        )
+    with ch2:
+        st.plotly_chart(
+            make_bar(pr_values,
+                     "Bad Precision",
+                     "Of all predicted bad — how many were truly bad?"),
+            use_container_width=True,
+        )
+
+    # Note about Groq RAG k=5 precision collapse
+    if "Groq" in name:
+        st.info(
+            "⚠️ Groq RAG k=5 shows higher bad recall (69.8%) than Agent1 (41.5%), "
+            "but bad precision collapses to 46.8% — meaning over half of its "
+            "'bad' predictions are actually good answers. "
+            "The recall gain is offset by a large increase in false positives, "
+            "so this result does not represent a genuine improvement."
+        )
 
     # McNemar result
     sig_bad = p_bad < 0.05
