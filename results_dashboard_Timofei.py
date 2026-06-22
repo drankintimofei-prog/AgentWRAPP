@@ -157,11 +157,15 @@ def render_model(name, color, a1_k5, a1_k10, rag_k5, rag_k10, p_all, p_bad,
             textfont=dict(size=13, color="#111827"),
         ))
         fig.update_layout(
-            title=dict(text=f"{title}<br><sup>{subtitle}</sup>", font=dict(size=13)),
-            yaxis=dict(range=[0, 108], title="%", gridcolor="#e5e7eb"),
+            title=dict(text=f"{title}<br><sup>{subtitle}</sup>",
+                       font=dict(size=13, color="#111827")),
+            yaxis=dict(range=[0, 108], title="%", gridcolor="#e5e7eb",
+                       tickfont=dict(color="#111827"),
+                       title_font=dict(color="#111827")),
             height=300, margin=dict(t=60, b=10, l=10, r=10),
             plot_bgcolor="#f8fafc", paper_bgcolor="white",
             xaxis=dict(showgrid=False, tickfont=dict(size=12, color="#111827")),
+            font=dict(color="#111827"),
         )
         return fig
 
