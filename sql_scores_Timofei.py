@@ -10,13 +10,16 @@ Usage:
 """
 import os
 import pandas as pd
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  CONFIGURATION  —  fill in your Supabase credentials
+#  CONFIGURATION  —  fill in your Supabase credentials, or set in .env
 # ═════════════════════════════════════════════════════════════════════════════
 
-SUPABASE_URL = ""   # e.g. "https://xxxx.supabase.co"
-SUPABASE_KEY = ""   # service-role or anon key
+SUPABASE_URL = ""   # leave empty to read from SUPABASE_URL in .env
+SUPABASE_KEY = ""   # leave empty to read from SUPABASE_KEY in .env
 
 # ═════════════════════════════════════════════════════════════════════════════
 
