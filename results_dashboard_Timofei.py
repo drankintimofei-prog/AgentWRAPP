@@ -74,7 +74,10 @@ def build_table(loaded: dict) -> pd.DataFrame:
             is_rag    = "RAG" in label
             is_agent1 = "Agent1" in label
             if ("RAG" in display_name and is_rag) or ("Agent1" in display_name and is_agent1):
-                m = ev["metrics"]
+                m  = ev["metrics"]
+                tn = m["tn"]; fp = m["fp"]; fn = m["fn"]
+                bad_rec  = m.get("bad_recall",    tn / (tn + fp) if (tn + fp) else 0.0)
+                bad_prec = m.get("bad_precision", tn / (tn + fn) if (tn + fn) else 0.0)
                 rows.append({
                     "Configuration":   display_name,
                     "Model":           "GPT-mini" if "GPT" in display_name else "Groq",
@@ -85,9 +88,9 @@ def build_table(loaded: dict) -> pd.DataFrame:
                     "Good Recall":     round(m["recall"] * 100, 1),
                     "Good Precision":  round(m["precision"] * 100, 1),
                     "Good F1":         round(m["f1"] * 100, 1),
-                    "Bad Recall":      round(m["bad_recall"] * 100, 1),
-                    "Bad Precision":   round(m["bad_precision"] * 100, 1),
-                    "TP": m["tp"], "TN": m["tn"], "FP": m["fp"], "FN": m["fn"],
+                    "Bad Recall":      round(bad_rec  * 100, 1),
+                    "Bad Precision":   round(bad_prec * 100, 1),
+                    "TP": m["tp"], "TN": tn, "FP": fp, "FN": fn,
                     "_has_rows": "rows" in ev,
                     "_label":    label,
                     "_path":     path,
