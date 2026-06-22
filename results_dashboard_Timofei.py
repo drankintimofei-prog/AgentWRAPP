@@ -137,24 +137,31 @@ def render_model(name, color, a1_k5, a1_k10, rag_k5, rag_k10, p_all, p_bad,
 
     # Bad Recall bar chart
     fig = go.Figure()
-    labels = ["Agent1", "RAG k=5", "RAG k=10"]
+    labels = ["Agent1\n(baseline)", "RAG k=5", "RAG k=10"]
     values = [a1_k10["Bad Recall"], rag_k5["Bad Recall"], rag_k10["Bad Recall"]]
-    bar_colors = [f"rgba({','.join(str(c) for c in _hex_to_rgb(color))},0.45)",
-                  f"rgba({','.join(str(c) for c in _hex_to_rgb(color))},0.7)",
-                  color]
+    r, g, b = _hex_to_rgb(color)
+    bar_colors = [
+        "#6b7280",                            # Agent1: solid mid-grey (clearly a baseline)
+        f"rgba({r},{g},{b},0.55)",            # RAG k=5: visible tint of model colour
+        color,                                 # RAG k=10: full model colour
+    ]
     fig.add_trace(go.Bar(
         x=labels, y=values,
         marker_color=bar_colors,
+        marker_line=dict(color="#ffffff", width=1),
         text=[f"{v}%" for v in values],
         textposition="outside",
+        textfont=dict(size=14, color="#1e293b"),
     ))
     fig.update_layout(
-        title="Bad Recall ★ (primary metric)",
-        yaxis=dict(range=[0, 100], title="%"),
-        height=280, margin=dict(t=40, b=10, l=10, r=10),
-        plot_bgcolor="white", paper_bgcolor="white",
-        xaxis=dict(showgrid=False), yaxis_showgrid=True,
-        yaxis_gridcolor="#f0f0f0",
+        title=dict(
+            text="Bad Recall — main metric<br><sup>Fraction of truly bad answers correctly identified as bad</sup>",
+            font=dict(size=14),
+        ),
+        yaxis=dict(range=[0, 105], title="Bad Recall (%)", gridcolor="#e5e7eb"),
+        height=300, margin=dict(t=60, b=10, l=10, r=10),
+        plot_bgcolor="#fafafa", paper_bgcolor="white",
+        xaxis=dict(showgrid=False),
     )
     st.plotly_chart(fig, use_container_width=True)
 
